@@ -11,7 +11,7 @@ library(shinycssloaders)
 
 # --- UI (Antarmuka Pengguna) ---
 ui <- navbarPage(
-  title = "Aplikasi Forecasting Modern",
+  title = "Aplikasi Forecasting ARIMA", # --- DIUBAH: Judul lebih spesifik
   theme = bslib::bs_theme(bootswatch = "cerulean", base_font = font_google("Inter")),
   
   tabPanel("Analisis & Visualisasi",
@@ -32,8 +32,9 @@ ui <- navbarPage(
                card_header("Hasil Visualisasi"),
                tabsetPanel(
                  id = "main_tabs",
-                 tabPanel("Forecast Gabungan", plotlyOutput("forecastPlot") %>% withSpinner()),
-                 tabPanel("Perbandingan Forecast", plotlyOutput("comparisonPlot") %>% withSpinner()),
+                 tabPanel("Plot Forecast ARIMA", plotlyOutput("forecastPlot") %>% withSpinner()),
+                 # --- DIHAPUS: Tab perbandingan tidak relevan lagi karena hanya ada satu model ---
+                 # tabPanel("Perbandingan Forecast", plotlyOutput("comparisonPlot") %>% withSpinner()),
                  tabPanel("Dekomposisi Deret Waktu", plotlyOutput("dcompPlot") %>% withSpinner())
                )
              )
@@ -44,13 +45,14 @@ ui <- navbarPage(
            layout_sidebar(
              sidebar = sidebar(
                width = "40%",
-               title = "Evaluasi Model",
+               title = "Evaluasi Model ARIMA", # --- DIUBAH: Judul disesuaikan
+               # --- DIUBAH: Value box tidak lagi menampilkan 'model terbaik', tapi info model yang digunakan
                value_box(
-                 title = "Model Terbaik (Out-of-Sample MAPE)",
-                 value = textOutput("bestModelName"),
-                 showcase = icon("trophy"),
+                 title = "Model Digunakan",
+                 value = "Auto ARIMA",
+                 showcase = icon("chart-line"),
                  theme = "primary",
-                 p(textOutput("bestModelMAPE"))
+                 p(textOutput("modelMAPE")) # Menampilkan metrik MAPE
                ),
                card(
                  card_header("Tabel Akurasi Forecast"),
@@ -58,7 +60,7 @@ ui <- navbarPage(
                )
              ),
              card(
-               card_header("Diagnostik Residual Model"),
+               card_header("Diagnostik Residual Model ARIMA"), # --- DIUBAH: Judul lebih spesifik
                plotlyOutput("residualsPlot") %>% withSpinner()
              )
            )
@@ -67,15 +69,16 @@ ui <- navbarPage(
   tabPanel("Tentang",
            card(
              card_header("Tentang Aplikasi"),
+             # --- DIUBAH: Deskripsi disesuaikan dengan fokus ARIMA
              markdown("
-#### Aplikasi Forecasting Interaktif
-Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik.
+#### Aplikasi Forecasting Interaktif dengan ARIMA
+Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik. Tujuannya adalah untuk menyediakan alat interaktif untuk peramalan deret waktu menggunakan model ARIMA.
 
 **Fitur Utama:**
 - **Upload Data:** Mengunggah data CSV dengan kolom tanggal dan nilai.
-- **Model Otomatis:** Membangun model ARIMA dan Holt-Winters secara otomatis.
-- **Visual Interaktif:** Menggunakan `plotly` untuk eksplorasi plot.
-- **Evaluasi Model:** Membandingkan performa model dengan metrik akurasi forecast (out-of-sample) seperti Root Mean Squared Error(RMSE), Mean Absolute Error(MAE), Mean Absolute Percentage Error(MAPE) dan Mean Squared Error(MSE). 
+- **Model Otomatis:** Membangun model `ARIMA` secara otomatis menggunakan fungsi dari paket `fpp3`.
+- **Visual Interaktif:** Menggunakan `plotly` untuk eksplorasi plot hasil forecast, dekomposisi, dan diagnostik residual.
+- **Evaluasi Model:** Menampilkan performa model dengan metrik akurasi forecast (out-of-sample) seperti Root Mean Squared Error (RMSE), Mean Absolute Error (MAE), dan Mean Absolute Percentage Error (MAPE).
 
 **Tim Pengembang:**
 - Siti Fadilah Nurkhotimah
@@ -97,7 +100,7 @@ server <- function(input, output, session) {
     df <- read_csv(input$userfile$datapath)
     
     if (!all(c("observation_date", "price") %in% names(df)) && ncol(df) >= 2) {
-      showNotification("Kolom tidak standar, asumsi kolom 1=observation_date, 2=price", type="warning")
+      showNotification("Kolom tidak standar, diasumsikan kolom 1 adalah 'observation_date', dan kolom 2 adalah 'price'", type="warning")
       names(df)[1:2] <- c("observation_date", "price")
     }
     validate(
@@ -122,12 +125,11 @@ server <- function(input, output, session) {
   
   model_fit <- reactive({
     req(train_data())
-    showNotification("Melatih model pada set Latihan...", type="message", duration=2)
+    showNotification("Melatih model ARIMA pada data Latihan...", type="message", duration=2)
+    # --- DIUBAH: Hanya melatih model ARIMA, model ETS (Holt-Winters) dihapus ---
     train_data() %>%
       model(
-        HW_Additive       = ETS(price ~ error("A") + trend("A") + season("A")),
-        HW_Multiplicative = ETS(price ~ error("M") + trend("A") + season("M")),
-        Auto_ARIMA        = ARIMA(price)
+        Auto_ARIMA = ARIMA(price)
       )
   })
   
@@ -148,50 +150,21 @@ server <- function(input, output, session) {
   output$forecastPlot <- renderPlotly({
     req(model_forecast(), dataset_ts())
     
-    level_req <- input$ci_level
-    lower_p <- (100 - level_req) / 200
-    upper_p <- (100 + level_req) / 200
-    
-    data_ribbon <- model_forecast() %>%
-      mutate(
-        .lower = quantile(price, lower_p),
-        .upper = quantile(price, upper_p)
-      ) %>%
-      filter(!is.na(.lower) & !is.na(.upper))
-    
-    p <- ggplot() +
-      geom_line(data = dataset_ts(), aes(x = observation_date, y = price, color = "Data Aktual")) +
-      geom_line(data = model_forecast(), aes(x = observation_date, y = .mean, color = .model)) +
-      {
-        if(nrow(data_ribbon) > 0)
-          geom_ribbon(data = data_ribbon, aes(x = observation_date, ymin = .lower, ymax = .upper, fill = .model), alpha = 0.2, linetype = 0)
-      } +
+    # --- DIUBAH: Logika plot disederhanakan untuk satu model ---
+    p <- model_forecast() %>%
+      autoplot(dataset_ts(), level = input$ci_level, alpha = 0.5) +
       labs(
-        title = paste(input$ahead, "Tahun Ramalan dengan Interval Kepercayaan", level_req, "%"),
-        y = "Harga", x = "Tahun dan Bulan"
-        # Hapus 'color' dan 'fill' dari sini
-      ) +
-      scale_color_manual(
-        name = "Legenda",
-        values = c("Data Aktual" = "black", "Auto_ARIMA" = "#F8766D", "HW_Additive" = "#00BFC4", "HW_Multiplicative" = "#7CAE00")
-      ) +
-      scale_fill_manual(
-        name = "Legenda",
-        values = c("Auto_ARIMA" = "#F8766D", "HW_Additive" = "#00BFC4", "HW_Multiplicative" = "#7CAE00")
+        title = paste(input$ahead, "Tahun Ramalan ARIMA dengan Interval Kepercayaan", input$ci_level, "%"),
+        y = "Harga", x = "Tahun dan Bulan",
+        colour = "Legenda"
       ) +
       theme_minimal()
     
     ggplotly(p)
   })
   
-  output$comparisonPlot <- renderPlotly({
-    req(model_forecast())
-    p <- model_forecast() %>%
-      autoplot(level = NULL) +
-      labs(title = "Perbandingan Titik Ramalan Antar Model", y = "Harga", x = "Tahun dan Bulan") +
-      theme_minimal()
-    ggplotly(p)
-  })
+  # --- DIHAPUS: Plot perbandingan tidak diperlukan lagi ---
+  # output$comparisonPlot <- renderPlotly({...})
   
   output$dcompPlot <- renderPlotly({
     req(dataset_ts())
@@ -212,33 +185,35 @@ server <- function(input, output, session) {
       model_accuracy() %>% select(.model, RMSE, MAE, MAPE, MASE),
       options = list(dom = 't', ordering = FALSE),
       rownames = FALSE,
-      caption = "Tabel Akurasi Forecast (Out-of-Sample)"
+      caption = "Tabel Akurasi Forecast ARIMA (Out-of-Sample)"
     )
   })
   
-  output$bestModelName <- renderText({
-    req(model_accuracy())
-    model_accuracy() %>% arrange(MAPE) %>% slice(1) %>% pull(.model)
-  })
+  # --- DIHAPUS: Logika untuk mencari model terbaik tidak diperlukan ---
+  # output$bestModelName <- renderText({...})
   
-  output$bestModelMAPE <- renderText({
+  # --- DIUBAH: Logika ini sekarang hanya mengambil MAPE dari satu-satunya model yang ada ---
+  output$modelMAPE <- renderText({
     req(model_accuracy())
-    m <- model_accuracy() %>% arrange(MAPE) %>% slice(1) %>% pull(MAPE)
+    m <- model_accuracy() %>% pull(MAPE)
     paste0("MAPE: ", round(m, 2), "%")
   })
   
   output$residualsPlot <- renderPlotly({
     req(model_fit())
-    res <- model_fit() %>% residuals()
-    p <- autoplot(res) +
-      labs(title = "Residual Diagnostics (pada Training Set)", y = "Residual", x = "Tahun dan Bulan") +
+    # autoplot akan otomatis membuat plot diagnostik yang sesuai karena hanya ada satu model
+    p <- model_fit() %>%
+      gg_tsresiduals() +
+      labs(title = "Diagnostik Residual Model ARIMA (pada Data Latihan)") +
       theme_minimal()
     ggplotly(p)
   })
   
+  # --- DIHAPUS: Opsi ini tidak lagi relevan ---
+  # outputOptions(output, "bestModelName", suspendWhenHidden = FALSE)
+  # Mengganti dengan output yang baru
+  outputOptions(output, "modelMAPE", suspendWhenHidden = FALSE)
   outputOptions(output, "accuracyTable", suspendWhenHidden = FALSE)
-  outputOptions(output, "bestModelName", suspendWhenHidden = FALSE)
-  outputOptions(output, "bestModelMAPE", suspendWhenHidden = FALSE)
   
 }
 

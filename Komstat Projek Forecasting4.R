@@ -244,5 +244,3 @@ server <- function(input, output, session) {
 
 # --- JALANKAN APLIKASI ---
 shinyApp(ui = ui, server = server)
-
-#tes

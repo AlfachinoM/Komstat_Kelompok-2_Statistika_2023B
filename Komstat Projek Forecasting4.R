@@ -74,9 +74,20 @@ ui <- navbarPage(
   ),
   
   tabPanel("Hasil Forecast",
-           card(
-             card_header("Plot Hasil Forecast ARIMA"),
-             plotlyOutput("forecastPlot") %>% withSpinner()
+           layout_sidebar(
+             sidebar = sidebar(
+               title = "Pengaturan Ordo ARIMA (Manual)",
+               numericInput("p_order", "Ordo p:", value = 1, min = 0, max = 5),
+               numericInput("d_order", "Ordo d:", value = 1, min = 0, max = 2),
+               numericInput("q_order", "Ordo q:", value = 1, min = 0, max = 5),
+               actionButton("run_manual_arima", "Gunakan Ordo Manual", icon = icon("cog"), class = "btn-info w-100")
+             ),
+             mainPanel(
+               card(
+                 card_header("Plot Hasil Forecast ARIMA"),
+                 plotlyOutput("forecastPlot") %>% withSpinner()
+               )
+             )
            )
   ),
   
@@ -162,8 +173,25 @@ server <- function(input, output, session) {
   
   train_data <- reactive({req(dataset_ts()); data_for_training <- dataset_ts(); if (nrow(data_for_training) < 48) {shiny::validate("Data tidak cukup. Min. 48 observasi diperlukan.")}; data_for_training %>% slice(1:(n() - 24))})
   model_fit <- reactive({req(train_data()); showNotification("Melatih model ARIMA...", type = "message", duration = 2); train_data() %>% model(Auto_ARIMA = ARIMA(price))})
+  model_manual <- eventReactive(input$run_manual_arima, {
+    req(train_data())
+    showNotification("Melatih model ARIMA dengan ordo manual...", type = "message", duration = 2)
+    
+    train_data() %>%
+      model(Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order)))
+  })
   model_accuracy <- reactive({req(model_fit(), dataset_ts()); fc_test <- model_fit() %>% forecast(h = 24); accuracy(fc_test, dataset_ts())})
-  model_forecast <- reactive({req(model_fit()); horizon <- paste0(input$ahead, " years"); model_fit() %>% forecast(h = horizon)})
+  model_forecast <- reactive({
+    horizon <- paste0(input$ahead, " years")
+    
+    if (input$run_manual_arima > 0) {
+      req(model_manual())
+      model_manual() %>% forecast(h = horizon)
+    } else {
+      req(model_fit())
+      model_fit() %>% forecast(h = horizon)
+    }
+  })
   
   output$exploration_instructions <- renderUI({
     if (!isTruthy(input$run_analysis) || input$run_analysis == 0) {
@@ -237,10 +265,31 @@ server <- function(input, output, session) {
   output$forecastPlot <- renderPlotly({
     req(model_forecast(), dataset_ts())
     forecast_data <- model_forecast()
+    
     alpha <- (100 - input$ci_level) / 100
-    lower_prob <- alpha / 2; upper_prob <- 1 - (alpha / 2)
-    plot_data <- forecast_data %>% mutate(.lower = quantile(price, p = lower_prob), .upper = quantile(price, p = upper_prob))
-    p <- ggplot() + geom_line(data = dataset_ts(), aes(x = observation_date, y = price, color = "Data Aktual")) + geom_line(data = plot_data, aes(x = observation_date, y = .mean, color = "Forecast ARIMA"), linetype = "dashed") + geom_ribbon(data = plot_data, aes(x = observation_date, ymin = .lower, ymax = .upper), fill = "skyblue", alpha = 0.4) + labs(title = paste(input$ahead, "Tahun Ramalan ARIMA"), y = "Harga", x = "Tahun dan Bulan", color = "Legenda") + scale_color_manual(values = c("Data Aktual" = "black", "Forecast ARIMA" = "#0072B2")) + theme_minimal()
+    lower_prob <- alpha / 2
+    upper_prob <- 1 - (alpha / 2)
+    
+    plot_data <- forecast_data %>%
+      mutate(
+        .lower = quantile(price, p = lower_prob),
+        .upper = quantile(price, p = upper_prob)
+      )
+    
+    judul <- if (input$run_manual_arima > 0) {
+      paste(input$ahead, "Tahun Ramalan ARIMA Manual (", input$p_order, ",", input$d_order, ",", input$q_order, ")")
+    } else {
+      paste(input$ahead, "Tahun Ramalan Auto ARIMA")
+    }
+    
+    p <- ggplot() +
+      geom_line(data = dataset_ts(), aes(x = observation_date, y = price, color = "Data Aktual")) +
+      geom_line(data = plot_data, aes(x = observation_date, y = .mean, color = "Forecast ARIMA"), linetype = "dashed") +
+      geom_ribbon(data = plot_data, aes(x = observation_date, ymin = .lower, ymax = .upper), fill = "skyblue", alpha = 0.4) +
+      labs(title = judul, y = "Harga", x = "Tahun dan Bulan", color = "Legenda") +
+      scale_color_manual(values = c("Data Aktual" = "black", "Forecast ARIMA" = "#0072B2")) +
+      theme_minimal()
+    
     ggplotly(p, tooltip = c("x", "y", "color"))
   })
   

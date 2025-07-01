@@ -42,7 +42,28 @@ ui <- navbarPage(
              )
            )
   ),
-  
+
+  tabPanel("Peramalan Menggunakan ARIMA",
+         layout_sidebar(
+           sidebar = sidebar(
+             title = "Set Ordo ARIMA",
+             card(
+               numericInput("manual_p", "Ordo p (AR):", 1, min = 0, max = 5),
+               numericInput("manual_d", "Ordo d (Difference):", 1, min = 0, max = 2),
+               numericInput("manual_q", "Ordo q (MA):", 0, min = 0, max = 5),
+               numericInput("manual_h", "Jumlah Tahun Ramalan:", 2, min = 1, max = 10),
+               sliderInput("manual_ci", "Confidence Interval (%):", 50, 99, 80, post = "%"),
+               actionButton("run_manual_arima", "Jalankan Forecast", class = "btn-primary w-100")
+             )
+           ),
+           card(
+             card_header("Hasil Forecast ARIMA"),
+             plotlyOutput("plot_manual_arima") %>% withSpinner(),
+             DTOutput("table_manual_arima") %>% withSpinner()
+           )
+         )
+),
+
   tabPanel("Detail & Diagnostik Model",
            layout_sidebar(
              sidebar = sidebar(

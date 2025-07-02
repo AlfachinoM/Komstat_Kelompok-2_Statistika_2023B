@@ -73,6 +73,14 @@ ui <- navbarPage(
            )
   ),
   
+  tabPanel("Uji Stasioneritas",
+         br(),
+         card(
+           card_header("Hasil Uji Stasioneritas (ADF Test) & Saran Differencing"),
+           verbatimTextOutput("adf_test_result") %>% withSpinner()
+         )
+  ),
+
   tabPanel("Hasil Forecast",
            layout_sidebar(
              sidebar = sidebar(
@@ -261,7 +269,30 @@ server <- function(input, output, session) {
       theme_minimal()
     ggplotly(p)
   })
-  
+
+  #OUTPUT UJI STASIONERITAS
+  output$adf_test_result <- renderPrint({
+  req(dataset_ts())
+  data <- dataset_ts()
+
+  adf_result <- ur.df(data$price, type = "drift", lags = 3)
+
+  cat("=== Augmented Dickey-Fuller Test ===\n")
+  print(summary(adf_result))
+
+  test_stat <- summary(adf_result)@teststat["tau2"]
+  critical_val <- summary(adf_result)@cval["tau2", "5pct"]
+
+  cat("\nInterpretasi:\n")
+  if (test_stat < critical_val) {
+    cat("Hasil: Data kemungkinan **STASIONER** (Tolak H0)\n")
+    cat("Rekomendasi: Gunakan d = 0 untuk ARIMA.\n")
+  } else {
+    cat("Hasil: Data kemungkinan **TIDAK STASIONER** (Gagal Tolak H0)\n")
+    cat("Rekomendasi: Gunakan d = 1 untuk ARIMA.\n")
+  }
+})
+
   output$forecastPlot <- renderPlotly({
     req(model_forecast(), dataset_ts())
     forecast_data <- model_forecast()

@@ -22,10 +22,15 @@ ui <- navbarPage(
   title = "Aplikasi Forecasting ARIMA",
   theme = bslib::bs_theme(bootswatch = "cerulean", base_font = font_google("Inter")),
   
+  # --- TAB 1: EKSPLORASI DATA (DIUBAH) ---
   tabPanel("Eksplorasi Data",
-           layout_sidebar(
-             sidebar = sidebar(
-               title = "Pengaturan Analisis",
+           # Mengganti layout_sidebar dengan layout_columns untuk full-width
+           layout_columns(
+             col_widths = c(3, 9), # Sidebar 25%, Main Panel 75%
+             
+             # --- KONTEN UNTUK KOLOM 1 (Sidebar) ---
+             div(
+               h4("Pengaturan Analisis"),
                card(
                  fileInput("userfile", "1. Unggah File CSV", 
                            accept = ".csv", buttonLabel = "Cari...", placeholder = "Tidak ada file dipilih"),
@@ -39,7 +44,9 @@ ui <- navbarPage(
                  actionButton("run_analysis", "Jalankan Analisis", icon = icon("play"), class = "btn-primary w-100")
                )
              ),
-             mainPanel(
+             
+             # --- KONTEN UNTUK KOLOM 2 (Main Panel) ---
+             div(
                uiOutput("exploration_instructions"),
                tabsetPanel(
                  type = "tabs",
@@ -86,29 +93,37 @@ ui <- navbarPage(
            )
   ),
   
+  # --- TAB 3: HASIL FORECAST (DIUBAH) ---
   tabPanel("Hasil Forecast",
-           layout_sidebar(
-             sidebar = sidebar(
-               title = "Pengaturan Ordo ARIMA (Manual)",
+           layout_columns(
+             col_widths = c(3, 9),
+             
+             # --- KONTEN KOLOM 1 (Sidebar) ---
+             div(
+               h4("Pengaturan Ordo ARIMA (Manual)"),
                numericInput("p_order", "Ordo p:", value = 1, min = 0, max = 5),
                numericInput("d_order", "Ordo d:", value = 1, min = 0, max = 2),
                numericInput("q_order", "Ordo q:", value = 1, min = 0, max = 5),
                actionButton("run_manual_arima", "Gunakan Ordo Manual", icon = icon("cog"), class = "btn-info w-100")
              ),
-             mainPanel(
-               card(
-                 card_header("Plot Hasil Forecast ARIMA"),
-                 plotlyOutput("forecastPlot") %>% withSpinner()
-               )
+             
+             # --- KONTEN KOLOM 2 (Main Panel) ---
+             card(
+               card_header("Plot Hasil Forecast ARIMA"),
+               plotlyOutput("forecastPlot") %>% withSpinner()
              )
            )
   ),
   
+  # --- TAB 4: DETAIL & DIAGNOSTIK (DIUBAH) ---
   tabPanel("Detail & Diagnostik Model",
-           layout_sidebar(
-             sidebar = sidebar(
-               width = "40%",
-               title = "Evaluasi Model ARIMA",
+           layout_columns(
+             # Menggunakan rasio 5:7 agar mendekati 40% untuk sidebar
+             col_widths = c(5, 7),
+             
+             # --- KONTEN KOLOM 1 (Sidebar) ---
+             div(
+               h4("Evaluasi Model ARIMA"),
                value_box(
                  title = "Model Digunakan",
                  value = textOutput("modelSpecText_detail"),
@@ -125,15 +140,16 @@ ui <- navbarPage(
                  DTOutput("accuracyTable") %>% withSpinner()
                ),
                card(
-                 card_header("Diagnostik Lanjutan (Residual vs Fitted, Histogram, Q-Q Plot, Ljung-Box)"),
+                 card_header("Diagnostik Lanjutan"),
                  plotOutput("residualsDiagnostics", height="600px") %>% withSpinner(),
                  tags$hr(),
                  verbatimTextOutput("ljung_box_test") %>% withSpinner(),
                  verbatimTextOutput("residual_summary") %>% withSpinner()
                )
              ),
-             mainPanel(
-               width = 7,
+             
+             # --- KONTEN KOLOM 2 (Main Panel) ---
+             div(
                card(
                  card_header("Laporan Model ARIMA"),
                  verbatimTextOutput("arimaReport") %>% withSpinner()
@@ -173,6 +189,7 @@ Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik. Tuj
 )
 
 # --- SERVER (GABUNGAN & FINAL) ---
+# SERVER TETAP SAMA, TIDAK PERLU DIUBAH
 server <- function(input, output, session) {
   
   # --- UI Dinamis & Data Processing ---

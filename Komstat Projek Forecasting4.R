@@ -12,7 +12,8 @@ library(patchwork)
 library(tsibble) 
 library(slider) 
 library(urca)
-
+library(forecast) 
+library(tseries)
 
 # --- UI (User Interface) ---
 ui <- navbarPage(
@@ -78,9 +79,9 @@ ui <- navbarPage(
   tabPanel("Uji Stasioneritas",
            br(),
            card(
-             card_header("Uji Stasioneritas (ADF)"),
-             uiOutput("adf_test_result") %>% withSpinner()
-            )
+             card_header("Uji Stasioneritas (ADF Test)"),
+             htmlOutput("stationarity_result")
+           )
   ),
 
   tabPanel("Hasil Forecast",
@@ -273,31 +274,45 @@ server <- function(input, output, session) {
   })
 
   #OUTPUT UJI STASIONERITAS
-  output$adf_test_result <- renderUI({
+  output$stationarity_result <- renderUI({
     req(dataset_ts())
     
-    data <- dataset_ts()
-    result <- ur.df(data$price, type = "drift", lags = 3)
-    sumres <- summary(result)
+    ts_data <- dataset_ts()$price
+    ts_data <- na.omit(as.numeric(ts_data))
     
-    test_stat <- sumres@teststat["tau2"]
-    critical_val <- sumres@cval["tau2", "5pct"]
+    # --- 1. Rekomendasi differencing (d) otomatis ---
+    d_rekomendasi <- ndiffs(ts_data)
     
-    hasil_uji <- if (is.na(test_stat) || is.na(critical_val)) {
-      "<p style='color: red;'>Gagal menghitung statistik ADF. Cek apakah jumlah data cukup dan tidak konstan.</p>"
-    } else if (test_stat < critical_val) {
-      "<p style='color: green;'><b>Hasil:</b> Data <b>STASIONER</b> (Tolak H0)<br><b>Rekomendasi:</b> Gunakan <code>d = 0</code> untuk ARIMA.</p>"
+    # --- 2. Differencing 1x jika diperlukan ---
+    ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
+    
+    # --- 3. Uji ADF ---
+    adf_result <- tryCatch({
+      adf.test(ts_diff)
+    }, error = function(e) {
+      return(NULL)
+    })
+    
+    if (is.null(adf_result)) {
+      return(HTML("<p style='color:red;'>Gagal melakukan uji ADF. Periksa apakah jumlah observasi mencukupi.</p>"))
+    }
+    
+    test_stat <- round(adf_result$statistic, 4)
+    p_value <- round(adf_result$p.value, 4)
+    status <- if (p_value < 0.05) {
+      paste0("<span style='color:green;'>STASIONER (p-value = ", p_value, ")</span>")
     } else {
-      "<p style='color: orange;'><b>Hasil:</b> Data <b>TIDAK STASIONER</b> (Gagal Tolak H0)<br><b>Rekomendasi:</b> Gunakan <code>d = 1</code> untuk ARIMA.</p>"
+      paste0("<span style='color:orange;'>TIDAK STASIONER (p-value = ", p_value, ")</span>")
     }
     
     HTML(paste0(
-      "<h4>Uji Stasioneritas (ADF)</h4>",
+      "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
       "<ul>",
-      "<li><b>Statistik Uji:</b> ", round(test_stat, 4), "</li>",
-      "<li><b>Nilai Kritis (5%):</b> ", round(critical_val, 4), "</li>",
-      "</ul>",
-      hasil_uji
+      "<li><b>Statistik Uji:</b> ", test_stat, "</li>",
+      "<li><b>p-value:</b> ", p_value, "</li>",
+      "<li><b>Rekomendasi differencing:</b> d = ", d_rekomendasi, "</li>",
+      "<li><b>Hasil uji ADF setelah differencing:</b> ", status, "</li>",
+      "</ul>"
     ))
   })
 

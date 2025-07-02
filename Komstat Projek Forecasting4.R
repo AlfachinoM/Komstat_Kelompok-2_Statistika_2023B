@@ -76,11 +76,11 @@ ui <- navbarPage(
   ),
   
   tabPanel("Uji Stasioneritas",
-         br(),
-         card(
-           card_header("Hasil Uji Stasioneritas (ADF Test) & Saran Differencing"),
-           verbatimTextOutput("adf_test_result") %>% withSpinner()
-         )
+           br(),
+           card(
+             card_header("Uji Stasioneritas (ADF)"),
+             uiOutput("adf_test_result") %>% withSpinner()
+            )
   ),
 
   tabPanel("Hasil Forecast",
@@ -273,28 +273,35 @@ server <- function(input, output, session) {
   })
 
   #OUTPUT UJI STASIONERITAS
-  output$adf_test_result <- renderPrint({
-  req(dataset_ts())
-  data <- dataset_ts()
+  output$adf_test_result <- renderUI({
+    req(dataset_ts())
+    
+    data <- dataset_ts()
+    result <- ur.df(data$price, type = "drift", lags = 3)
+    sumres <- summary(result)
+    
+    test_stat <- sumres@teststat["tau2"]
+    critical_val <- sumres@cval["tau2", "5pct"]
+    
+    hasil_uji <- if (is.na(test_stat) || is.na(critical_val)) {
+      "<p style='color: red;'>Gagal menghitung statistik ADF. Cek apakah jumlah data cukup dan tidak konstan.</p>"
+    } else if (test_stat < critical_val) {
+      "<p style='color: green;'><b>Hasil:</b> Data <b>STASIONER</b> (Tolak H0)<br><b>Rekomendasi:</b> Gunakan <code>d = 0</code> untuk ARIMA.</p>"
+    } else {
+      "<p style='color: orange;'><b>Hasil:</b> Data <b>TIDAK STASIONER</b> (Gagal Tolak H0)<br><b>Rekomendasi:</b> Gunakan <code>d = 1</code> untuk ARIMA.</p>"
+    }
+    
+    HTML(paste0(
+      "<h4>Uji Stasioneritas (ADF)</h4>",
+      "<ul>",
+      "<li><b>Statistik Uji:</b> ", round(test_stat, 4), "</li>",
+      "<li><b>Nilai Kritis (5%):</b> ", round(critical_val, 4), "</li>",
+      "</ul>",
+      hasil_uji
+    ))
+  })
 
-  adf_result <- ur.df(data$price, type = "drift", lags = 3)
-
-  cat("=== Augmented Dickey-Fuller Test ===\n")
-  print(summary(adf_result))
-
-  test_stat <- summary(adf_result)@teststat["tau2"]
-  critical_val <- summary(adf_result)@cval["tau2", "5pct"]
-
-  cat("\nInterpretasi:\n")
-  if (test_stat < critical_val) {
-    cat("Hasil: Data kemungkinan **STASIONER** (Tolak H0)\n")
-    cat("Rekomendasi: Gunakan d = 0 untuk ARIMA.\n")
-  } else {
-    cat("Hasil: Data kemungkinan **TIDAK STASIONER** (Gagal Tolak H0)\n")
-    cat("Rekomendasi: Gunakan d = 1 untuk ARIMA.\n")
-  }
-})
-
+  #OUTPUT HASIL FORECASTING
   output$forecastPlot <- renderPlotly({
     req(model_forecast(), dataset_ts())
     forecast_data <- model_forecast()

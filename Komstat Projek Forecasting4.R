@@ -282,8 +282,8 @@ server <- function(input, output, session) {
     }
     
   # Ubah residual dan fitted ke bentuk vektor numerik
-  resid_df <- residuals(active_model) 
-  fitted_df <- fitted(active_model) 
+  resid_df <- residuals(active_model) %>% as_tibble()
+  fitted_df <- fitted(active_model) %>% as_tibble()
   
   residuals_vec <- resid_df$.resid
   fitted_vec <- fitted_df$.fitted

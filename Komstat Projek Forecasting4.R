@@ -83,7 +83,7 @@ ui <- navbarPage(
              htmlOutput("stationarity_result")
            )
   ),
-
+  
   tabPanel("Hasil Forecast",
            layout_sidebar(
              sidebar = sidebar(
@@ -109,13 +109,13 @@ ui <- navbarPage(
                title = "Evaluasi Model ARIMA",
                value_box(
                  title = "Model Digunakan",
-                 value = "Auto ARIMA",
+                 value = textOutput("modelSpecText_detail"),
                  showcase = icon("chart-line"),
                  theme = "primary",
                  p(textOutput("modelMAPE"))
                ),
                card(
-                 card_header("Tabel Akurasi Forecast"),
+                 card_header("Tabel Evaluasi Model"),
                  DTOutput("accuracyTable") %>% withSpinner()
                )
              ),
@@ -162,6 +162,7 @@ Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik. Tuj
 # --- SERVER ---
 server <- function(input, output, session) {
   
+  # --- UI Dinamis & Data Processing ---
   uploaded_data_header <- eventReactive(input$userfile, {req(input$userfile); names(read_csv(input$userfile$datapath, n_max = 0, show_col_types = FALSE))})
   output$date_col_selector <- renderUI({req(uploaded_data_header()); guess <- grep("date|time|yyyymm", uploaded_data_header(), value = TRUE, ignore.case = TRUE)[1]; selectInput("date_col", "2. Pilih Kolom Tanggal:", choices = uploaded_data_header(), selected = guess)})
   output$value_col_selector <- renderUI({req(uploaded_data_header()); guess <- grep("price|value|harga|jumlah", uploaded_data_header(), value = TRUE, ignore.case = TRUE)[1]; selectInput("value_col", "3. Pilih Kolom Nilai:", choices = uploaded_data_header(), selected = guess)})
@@ -169,10 +170,7 @@ server <- function(input, output, session) {
   dataset_ts <- eventReactive(input$run_analysis, {
     req(input$userfile, input$date_col, input$value_col)
     showNotification("Memproses data...", type = "message", duration = 2)
-    
-    # --- PERBAIKAN DI SINI: Menambahkan progress = FALSE ---
     df <- read_csv(input$userfile$datapath, show_col_types = FALSE, progress = FALSE)
-    
     validate(need(nrow(df) > 0, "File kosong atau tidak valid."))
     df %>%
       select(observation_date = all_of(input$date_col), price = all_of(input$value_col)) %>%
@@ -182,33 +180,49 @@ server <- function(input, output, session) {
       ) %>% drop_na() %>% as_tsibble(index = observation_date)
   })
   
+  # --- Reaktif untuk Data Latih & Model ---
   train_data <- reactive({req(dataset_ts()); data_for_training <- dataset_ts(); if (nrow(data_for_training) < 48) {shiny::validate("Data tidak cukup. Min. 48 observasi diperlukan.")}; data_for_training %>% slice(1:(n() - 24))})
   model_fit <- reactive({req(train_data()); showNotification("Melatih model ARIMA...", type = "message", duration = 2); train_data() %>% model(Auto_ARIMA = ARIMA(price))})
   model_manual <- eventReactive(input$run_manual_arima, {
     req(train_data())
     showNotification("Melatih model ARIMA dengan ordo manual...", type = "message", duration = 2)
-    
-    train_data() %>%
-      model(Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order)))
-  })
-  model_accuracy <- reactive({req(model_fit(), dataset_ts()); fc_test <- model_fit() %>% forecast(h = 24); accuracy(fc_test, dataset_ts())})
-  model_forecast <- reactive({
-    horizon <- paste0(input$ahead, " years")
-    
-    if (input$run_manual_arima > 0) {
-      req(model_manual())
-      model_manual() %>% forecast(h = horizon)
-    } else {
-      req(model_fit())
-      model_fit() %>% forecast(h = horizon)
-    }
+    train_data() %>% model(Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order)))
   })
   
-  output$exploration_instructions <- renderUI({
-    if (!isTruthy(input$run_analysis) || input$run_analysis == 0) {
-      h4("Silakan unggah file, pilih kolom, dan klik 'Jalankan Analisis' untuk melihat eksplorasi data.", style = "text-align: center; color: grey;")
+  # --- Reaktif untuk Evaluasi Model (Akurasi + AIC) ---
+  model_evaluation <- reactive({
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
     }
+    
+    acc <- active_model %>% forecast(h = 24) %>% accuracy(dataset_ts())
+    glc <- active_model %>% glance()
+    
+    full_eval <- acc %>%
+      left_join(glc, by = ".model") %>%
+      select(.model, AIC, MAPE, RMSE, MAE, MASE, AICc, BIC) %>%
+      mutate(across(where(is.numeric), ~round(., 2)))
+    
+    return(full_eval)
   })
+  
+  # --- Reaktif untuk Forecast ---
+  model_forecast <- reactive({
+    horizon <- paste0(input$ahead, " years")
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
+    }
+    active_model %>% forecast(h = horizon)
+  })
+  
+  # --- Output: Eksplorasi Data ---
+  output$exploration_instructions <- renderUI({if (!isTruthy(input$run_analysis)) h4("Silakan unggah file...", style = "text-align: center; color: grey;")})
   
   output$summaryStats <- renderPrint({
     req(dataset_ts())
@@ -222,140 +236,97 @@ server <- function(input, output, session) {
     cat("Jumlah Nilai NA  :", sum(is.na(data$price)), "\n")
   })
   
-  output$tsPlot <- renderPlotly({
-    req(dataset_ts())
-    p <- dataset_ts() %>%
-      ggplot(aes(x = observation_date, y = price)) +
-      geom_line(color = "#0072B2") +
-      labs(title = paste("Time Series Plot untuk", input$value_col),
-           x = "Tanggal", y = "Nilai") +
-      theme_minimal()
-    ggplotly(p)
-  })
-  
-  output$acfPacfPlot <- renderPlot({
-    req(dataset_ts())
-    dataset_ts() %>%
-      gg_tsdisplay(y = price, plot_type = 'partial', lag_max = 36) +
-      labs(title = paste("ACF & PACF untuk", input$value_col))
-  })
-  
-  output$dcompPlot <- renderPlotly({
-    req(dataset_ts())
-    p <- dataset_ts() %>%
-      model(STL(price ~ season(window = "periodic"), robust = TRUE)) %>%
-      components() %>%
-      autoplot() +
-      labs(title = "Dekomposisi STL")
-    ggplotly(p)
-  })
-  
+  output$tsPlot <- renderPlotly({ req(dataset_ts()); p <- dataset_ts() %>% autoplot(price) + labs(title = paste("Plot Time Series:", input$value_col)); ggplotly(p, tooltip = "y") })
+  output$acfPacfPlot <- renderPlot({ req(dataset_ts()); dataset_ts() %>% gg_tsdisplay(y = price, plot_type = 'partial', lag_max = 36) + labs(title = "ACF & PACF") })
+  output$dcompPlot <- renderPlotly({ req(dataset_ts()); p <- dataset_ts() %>% model(STL(price)) %>% components() %>% autoplot() + labs(title = "Dekomposisi STL"); ggplotly(p) })
   output$rollingStatsPlot <- renderPlotly({
     req(dataset_ts())
     rolling_data <- dataset_ts() %>%
       mutate(
-        rolling_mean = slide_dbl(price, .f = ~mean(.x, na.rm = TRUE), .size = 12, .align = "center"),
-        rolling_sd = slide_dbl(price, .f = ~sd(.x, na.rm = TRUE), .size = 12, .align = "center")
+        rolling_mean = slide_dbl(price, .f = mean, .size = 12, .align = "center"),
+        rolling_sd = slide_dbl(price, .f = sd, .size = 12, .align = "center")
       )
     p <- ggplot(rolling_data, aes(x = observation_date)) +
-      geom_line(aes(y = price, color = "Data Asli", linetype = "Data Asli")) +
-      geom_line(aes(y = rolling_mean, color = "Rolling Mean", linetype = "Rolling Mean")) +
-      geom_line(aes(y = rolling_sd, color = "Rolling Std Dev", linetype = "Rolling Std Dev")) +
-      labs(title = "Analisis Kestasioneran Visual (Window 12 Bulan)",
-           x = "Tanggal", y = "Nilai", color = "Legenda", linetype = "Legenda") +
-      scale_color_manual(
-        values = c("Data Asli" = "grey", "Rolling Mean" = "blue", "Rolling Std Dev" = "red")
-      ) +
-      scale_linetype_manual(
-        values = c("Data Asli" = "solid", "Rolling Mean" = "dashed", "Rolling Std Dev" = "dotted")
-      ) + 
+      geom_line(aes(y = price, text = paste("Nilai Aktual:", price)), color = "grey") +
+      geom_line(aes(y = rolling_mean, text = paste("Rolling Mean:", round(rolling_mean,2))), color = "blue", linetype = "dashed") +
+      geom_line(aes(y = rolling_sd, text = paste("Rolling SD:", round(rolling_sd,2))), color = "red", linetype = "dotted") +
+      labs(title = "Analisis Kestasioneran Visual", x = "Tanggal", y = "Nilai") +
       theme_minimal()
-    ggplotly(p)
-  })
-
-  #OUTPUT UJI STASIONERITAS
-  output$stationarity_result <- renderUI({
-    req(dataset_ts())
-    
-    ts_data <- dataset_ts()$price
-    ts_data <- na.omit(as.numeric(ts_data))
-    
-    # --- 1. Rekomendasi differencing (d) otomatis ---
-    d_rekomendasi <- ndiffs(ts_data)
-    
-    # --- 2. Differencing 1x jika diperlukan ---
-    ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
-    
-    # --- 3. Uji ADF ---
-    adf_result <- tryCatch({
-      adf.test(ts_diff)
-    }, error = function(e) {
-      return(NULL)
-    })
-    
-    if (is.null(adf_result)) {
-      return(HTML("<p style='color:red;'>Gagal melakukan uji ADF. Periksa apakah jumlah observasi mencukupi.</p>"))
-    }
-    
-    test_stat <- round(adf_result$statistic, 4)
-    p_value <- round(adf_result$p.value, 4)
-    status <- if (p_value < 0.05) {
-      paste0("<span style='color:green;'>STASIONER (p-value = ", p_value, ")</span>")
-    } else {
-      paste0("<span style='color:orange;'>TIDAK STASIONER (p-value = ", p_value, ")</span>")
-    }
-    
-    HTML(paste0(
-      "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
-      "<ul>",
-      "<li><b>Statistik Uji:</b> ", test_stat, "</li>",
-      "<li><b>p-value:</b> ", p_value, "</li>",
-      "<li><b>Rekomendasi differencing:</b> d = ", d_rekomendasi, "</li>",
-      "<li><b>Hasil uji ADF setelah differencing:</b> ", status, "</li>",
-      "</ul>"
-    ))
-  })
-
-  #OUTPUT HASIL FORECASTING
-  output$forecastPlot <- renderPlotly({
-    req(model_forecast(), dataset_ts())
-    forecast_data <- model_forecast()
-    
-    alpha <- (100 - input$ci_level) / 100
-    lower_prob <- alpha / 2
-    upper_prob <- 1 - (alpha / 2)
-    
-    plot_data <- forecast_data %>%
-      mutate(
-        .lower = quantile(price, p = lower_prob),
-        .upper = quantile(price, p = upper_prob)
-      )
-    
-    judul <- if (input$run_manual_arima > 0) {
-      paste(input$ahead, "Tahun Ramalan ARIMA Manual (", input$p_order, ",", input$d_order, ",", input$q_order, ")")
-    } else {
-      paste(input$ahead, "Tahun Ramalan Auto ARIMA")
-    }
-    
-    p <- ggplot() +
-      geom_line(data = dataset_ts(), aes(x = observation_date, y = price, color = "Data Aktual")) +
-      geom_line(data = plot_data, aes(x = observation_date, y = .mean, color = "Forecast ARIMA"), linetype = "dashed") +
-      geom_ribbon(data = plot_data, aes(x = observation_date, ymin = .lower, ymax = .upper), fill = "skyblue", alpha = 0.4) +
-      labs(title = judul, y = "Harga", x = "Tahun dan Bulan", color = "Legenda") +
-      scale_color_manual(values = c("Data Aktual" = "black", "Forecast ARIMA" = "#0072B2")) +
-      theme_minimal()
-    
-    ggplotly(p, tooltip = c("x", "y", "color"))
+    ggplotly(p, tooltip = "text")
   })
   
-  output$accuracyTable <- renderDT({req(model_accuracy()); datatable(model_accuracy() %>% select(.model, RMSE, MAE, MAPE, MASE), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Akurasi Forecast ARIMA (Out-of-Sample)")})
-  output$modelMAPE <- renderText({req(model_accuracy()); m <- model_accuracy() %>% pull(MAPE); paste0("MAPE: ", round(m, 2), "%")})
-  output$arimaReport <- renderPrint({req(model_fit()); report(model_fit())})
-  output$residualsPlot <- renderPlot({ req(model_fit()); model_fit() %>% gg_tsresiduals() })
+  # --- Output: Uji Stasioneritas ---
+  output$stationarity_result <- renderUI({
+    req(dataset_ts())
+    ts_data <- na.omit(as.numeric(dataset_ts()$price))
+    d_rekomendasi <- ndiffs(ts_data)
+    ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
+    adf_result <- adf.test(ts_diff)
+    status <- if (adf_result$p.value < 0.05) "<span style='color:green;'>STASIONER</span>" else "<span style='color:orange;'>TIDAK STASIONER</span>"
+    HTML(paste0("<h4>Hasil Uji Stasioneritas (ADF)</h4><ul><li>Statistik Uji: ", round(adf_result$statistic, 4), "</li><li>p-value: ", round(adf_result$p.value, 4), "</li><li>Rekomendasi differencing (d): ", d_rekomendasi, "</li><li>Hasil setelah differencing: ", status, "</li></ul>"))
+  })
+  
+  # --- Output: Hasil Forecast (PENDEKATAN MENGGUNAKAN AUTOPLOT) ---
+  output$forecastPlot <- renderPlotly({
+    req(model_forecast(), dataset_ts())
+    
+    fc <- model_forecast()
+    data <- dataset_ts()
+    
+    judul <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      paste(input$ahead, "Tahun Ramalan ARIMA Manual (", input$p_order, ",", input$d_order, ",", input$q_order, ")")
+    } else {
+      req(model_evaluation())
+      spec <- model_evaluation()$.model
+      paste(input$ahead, "Tahun Ramalan Model", spec)
+    }
+    
+    p <- fc %>%
+      autoplot(data, level = input$ci_level) +
+      labs(title = judul, y = "Harga", x = "Tahun dan Bulan") +
+      theme_minimal()
+    
+    ggplotly(p, tooltip = c("x", "y"))
+  })
+  
+  # --- Output: Detail & Diagnostik Model ---
+  output$accuracyTable <- renderDT({
+    req(model_evaluation())
+    datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model (Akurasi Out-of-Sample & Info In-Sample)")
+  })
+  
+  output$modelSpecText_detail <- renderText({ req(model_evaluation()); model_evaluation()$.model })
+  output$modelMAPE <- renderText({
+    req(model_evaluation())
+    aic_val <- model_evaluation()$AIC
+    mape_val <- model_evaluation()$MAPE
+    paste0("AIC: ", aic_val, " | MAPE: ", mape_val, "%")
+  })
+  
+  output$arimaReport <- renderPrint({
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
+    }
+    report(active_model)
+  })
+  
+  output$residualsPlot <- renderPlot({
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
+    }
+    active_model %>% gg_tsresiduals()
+  })
   
   outputOptions(output, "modelMAPE", suspendWhenHidden = FALSE)
   outputOptions(output, "accuracyTable", suspendWhenHidden = FALSE)
   outputOptions(output, "arimaReport", suspendWhenHidden = FALSE)
+  outputOptions(output, "modelSpecText_detail", suspendWhenHidden = FALSE)
 }
 
 # --- JALANKAN APLIKASI ---

@@ -177,12 +177,12 @@ Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik. Tuj
 - **Evaluasi Model:** Menampilkan performa model dengan metrik akurasi forecast (out-of-sample) dan diagnostik residual.
 
 **Tim Pengembang:**
-- Siti Fadilah Nurkhotimah
-- Alfachino Maulana
-- Ayda Syifa Ul Aliyah
-- Rachmawati Tefaaulia
-- Oki Ramadhan Pramono
-- Septiani Amalia Wulandari
+- Siti Fadilah Nurkhotimah (1314623019)
+- Alfachino Maulana (1314623043)
+- Ayda Syifa Ul Aliyah (1314623064)
+- Rachmawati Tefaaulia (1314623066)
+- Oki Ramadhan Pramono (1314623067)
+- Septiani Amalia Wulandari (1314623069)
       ")
            )
   )

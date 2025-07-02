@@ -253,6 +253,112 @@ server <- function(input, output, session) {
   output$accuracyTable <- renderDT({ req(model_evaluation()); datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model (Akurasi Out-of-Sample & Info In-Sample)")})
   output$modelSpecText_detail <- renderText({ req(model_evaluation()); model_evaluation()$.model })
   output$modelMAPE <- renderText({ req(model_evaluation()); aic_val <- model_evaluation()$AIC; mape_val <- model_evaluation()$MAPE; paste0("AIC: ", aic_val, " | MAPE: ", mape_val, "%")})
+  output$arimaReport <- renderPrint({
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
+    }
+    report(active_model)
+  })
+  
+  output$residualsPlot <- renderPlot({
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
+    }
+    active_model %>% gg_tsresiduals()
+  })
+  # --- Output: Plot Residual vs Fitted, Histogram, Q-Q Plot ---
+  output$residualsDiagnostics <- renderPlot({
+    active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+      isolate(model_manual())
+    } else {
+      req(model_fit())
+      model_fit()
+    }
+    
+  # Ubah residual dan fitted ke bentuk vektor numerik
+  resid_df <- residuals(active_model) 
+  fitted_df <- fitted(active_model) 
+  
+  residuals_vec <- resid_df$.resid
+  fitted_vec <- fitted_df$.fitted
+
+  # Plot Residual vs Fitted
+  p1 <- ggplot(data.frame(fitted = fitted_vec, residuals = residuals_vec), aes(x = fitted, y = residuals)) +
+    geom_point(color = "steelblue") +
+    geom_hline(yintercept = 0, linetype = "dashed", color = "red") +
+    labs(title = "Plot Residual vs Fitted", x = "Fitted Values", y = "Residuals") +
+    theme_minimal()
+
+  # Histogram of Residuals
+  p2 <- ggplot(data.frame(residuals = residuals_vec), aes(x = residuals)) +
+    geom_histogram(bins = 30, fill = "orange", alpha = 0.7, color = "black") +
+    labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") +
+    theme_minimal()
+
+  # Q-Q Plot
+  p3 <- ggplot(data.frame(residuals = residuals_vec), aes(sample = residuals)) +
+    stat_qq() +
+    stat_qq_line() +
+    labs(title = "Q-Q Plot of Residuals") +
+    theme_minimal()
+
+  (p1 / p2 / p3) + plot_layout(ncol = 1)
+})
+
+# --- Output: Ringkasan Diagnostik Residual ---
+output$residual_summary <- renderPrint({
+  active_model <- if (isTruthy(input$run_manual_arima) && !is.null(isolate(model_manual()))) {
+    isolate(model_manual())
+  } else {
+    req(model_fit())
+    model_fit()
+  }
+
+  resid_df <- residuals(active_model) %>% as_tibble()
+  fitted_df <- fitted(active_model) %>% as_tibble()
+
+  residuals_vec <- resid_df$.resid
+  fitted_vec <- fitted_df$.fitted
+
+  # Autokorelasi
+  acf_res <- acf(residuals_vec, plot = FALSE)
+  acf_table <- data.frame(Lag = acf_res$lag, ACF = round(acf_res$acf, 3))
+  
+  # Normalitas
+  shapiro_test <- shapiro.test(residuals_vec)
+
+  # Homoskedastisitas pakai regresi residual^2 ~ fitted
+  bp_model <- lm(I(residuals_vec^2) ~ fitted_vec)
+  bp_pvalue <- summary(bp_model)$coefficients[2, 4]
+
+  cat("Ringkasan Diagnostik Residual:\n\n")
+
+  cat("Normalitas (Shapiro-Wilk Test):\n")
+  cat("  Statistik Uji:", round(shapiro_test$statistic, 4), "\n")
+  cat("  p-value      :", round(shapiro_test$p.value, 4), "\n")
+  if (shapiro_test$p.value < 0.05) {
+    cat("  → Residual tidak normal\n")
+  } else {
+    cat("  → Residual normal\n")
+  }
+
+  cat("\nHomoskedastisitas (Regresi Residual² ~ Fitted):\n")
+  cat("  p-value koefisien fitted:", round(bp_pvalue, 4), "\n")
+  if (bp_pvalue < 0.05) {
+    cat("  → Terdapat heteroskedastisitas\n")
+  } else {
+    cat("  → Tidak terdapat heteroskedastisitas\n")
+  }
+
+  cat("\nAutokorelasi (ACF 10 lag pertama):\n")
+  print(head(acf_table, 10))
+})
   
   # OUTPUT BARU UNTUK INTERPRETASI
   output$eval_interpretation <- renderUI({

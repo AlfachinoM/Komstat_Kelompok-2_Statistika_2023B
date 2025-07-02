@@ -329,7 +329,22 @@ server <- function(input, output, session) {
   output$accuracyTable <- renderDT({ req(model_evaluation()); datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model")})
   output$modelSpecText_detail <- renderText({ req(model_evaluation()); model_evaluation()$.model })
   output$modelMAPE <- renderText({ req(model_evaluation()); aic_val <- model_evaluation()$AIC; mape_val <- model_evaluation()$MAPE; paste0("AIC: ", aic_val, " | MAPE: ", mape_val, "%")})
-  output$arimaReport <- renderPrint({ req(active_model()); report(active_model()) })
+  output$arimaReport <- renderPrint({
+    req(train_data())
+    ts_data <- ts(train_data()$price, frequency = 12)
+    model_summary <- auto.arima(ts_data)
+    print(summary(model_summary))
+    
+    cat("\n--- Interpretasi Umum ---\n")
+    cat("Model ARIMA(", paste(model_summary$arma[1:3], collapse = ","), ")",
+        "dengan ordo:\n",
+        "• p (AR)  =", model_summary$arma[1], "\n",
+        "• d       =", model_summary$arma[6], "\n",
+        "• q (MA)  =", model_summary$arma[2], "\n\n")
+    cat("Interpretasi:\n")
+    cat("- Nilai AIC:", round(model_summary$aic, 2), "menunjukkan kualitas model (lebih kecil lebih baik).\n")
+    cat("- Periksa residual (lihat tab diagnostik) untuk validasi asumsi white noise.\n")
+  })
   output$residualsPlot <- renderPlot({ req(active_model()); active_model() %>% gg_tsresiduals(lag_max = 24) })
   
   output$residualsDiagnostics <- renderPlot({

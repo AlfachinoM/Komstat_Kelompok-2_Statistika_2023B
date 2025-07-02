@@ -315,11 +315,9 @@ server <- function(input, output, session) {
   output$arimaReport <- renderPrint({ req(active_model()); report(active_model()) })
   output$residualsPlot <- renderPlot({ req(active_model()); active_model() %>% gg_tsresiduals(lag_max = 24) })
   
-  # ### KODE YANG DIPERBAIKI (FINAL) ###
   output$residualsDiagnostics <- renderPlot({
     req(active_model())
     
-    # PERBAIKAN: Tambahkan () setelah active_model
     resid_df <- residuals(active_model()) %>% as_tibble()
     fitted_df <- fitted(active_model()) %>% as_tibble()
     

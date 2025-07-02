@@ -123,6 +123,12 @@ ui <- navbarPage(
                card(
                  card_header("Tabel Evaluasi Model"),
                  DTOutput("accuracyTable") %>% withSpinner()
+               ),
+               card(
+                 card_header("Diagnostik Lanjutan (Residual vs Fitted, Histogram, Q-Q Plot, Ljung-Box)"),
+                 plotOutput("residualsDiagnostics") %>% withSpinner(),
+                 verbatimTextOutput("ljung_box_test"),
+                 verbatimTextOutput("residual_summary")
                )
              ),
              mainPanel(

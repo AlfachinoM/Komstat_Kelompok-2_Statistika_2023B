@@ -112,20 +112,26 @@ ui <- navbarPage(
   tabPanel("Hasil Forecast",
            layout_columns(
              col_widths = c(3, 9),
-             
-             # --- KONTEN KOLOM 1 (Sidebar) ---
+             #sidebar input ordo
              div(
                h4("Pengaturan Ordo ARIMA (Manual)"),
                numericInput("p_order", "Ordo p:", value = 1, min = 0, max = 5),
                numericInput("d_order", "Ordo d:", value = 1, min = 0, max = 2),
                numericInput("q_order", "Ordo q:", value = 1, min = 0, max = 5),
+               numericInput("P_order", "Ordo P:", value = 0, min = 0, max = 5),
+               numericInput("D_order", "Ordo D:", value = 0, min = 0, max = 2),
+               numericInput("Q_order", "Ordo Q:", value = 0, min = 0, max = 5),
                actionButton("run_manual_arima", "Gunakan Ordo Manual", icon = icon("cog"), class = "btn-info w-100")
              ),
              
-             # --- KONTEN KOLOM 2 (Main Panel) ---
+             #plot arima
              card(
-               card_header("Plot Hasil Forecast ARIMA"),
-               plotlyOutput("forecastPlot") %>% withSpinner()
+               card_header("Plot Hasil Forecast ARIMA Manual"),
+               plotlyOutput("forecastPlotManual") %>% withSpinner()
+             ),
+             card(
+               card_header("Plot Hasil Forecast ARIMA Otomatis"),
+               plotlyOutput("forecastPlotAuto") %>% withSpinner()
              )
            )
   ),
@@ -395,16 +401,48 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
 
-  # --- Output: Hasil Forecast ---
-  output$forecastPlot <- renderPlotly({
-    req(model_forecast(), dataset_ts(), model_evaluation())
-    fc <- model_forecast()
-    data <- dataset_ts()
-    spec <- model_evaluation()$.model
-    judul <- paste(input$ahead, "Tahun Ramalan Model", spec)
+  #---HASIL FORECASST---
+  active_model <- reactiveVal()
+  
+  observeEvent(train_data(), {
+    req(train_data())
+    showNotification("Melatih model ARIMA otomatis...", type = "message", duration = 3)
+    model_auto <- train_data() %>% model(Auto_ARIMA = ARIMA(price))
+    active_model(model_auto)
+  })
+  
+  observeEvent(input$run_manual_arima, {
+    req(train_data())
+    showNotification("Melatih model ARIMA dengan ordo manual...", type = "message", duration = 3)
     
-    p <- fc %>% autoplot(data, level = input$ci_level) + labs(title = judul, y = input$value_col, x = "Tahun dan Bulan") + theme_minimal()
-    ggplotly(p, tooltip = c("x", "y"))
+    model_manual <- train_data() %>% model(Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order) + PDQ(input$P_order, input$D_order, input$Q_order)))
+    active_model(model_manual)
+  })
+  
+  # --- Output: Hasil Forecast untuk Model Manual ---
+  output$forecastPlotManual <- renderPlotly({
+    req(active_model())
+    horizon <- paste0(input$ahead, " years")
+    fc_manual <- active_model() %>% forecast(h = horizon)
+    
+    p_manual <- fc_manual %>% autoplot(train_data(), level = input$ci_level) +
+      labs(title = "Hasil Forecast ARIMA Manual", y = input$value_col, x = "Tahun dan Bulan") +
+      theme_minimal()
+    
+    ggplotly(p_manual, tooltip = c("x", "y"))
+  })
+  
+  # --- Output: Hasil Forecast untuk Model Auto ARIMA ---
+  output$forecastPlotAuto <- renderPlotly({
+    req(active_model())
+    horizon <- paste0(input$ahead, " years")
+    fc_auto <- active_model() %>% forecast(h = horizon)
+    
+    p_auto <- fc_auto %>% autoplot(train_data(), level = input$ci_level) +
+      labs(title = "Hasil Forecast ARIMA Otomatis", y = input$value_col, x = "Tahun dan Bulan") +
+      theme_minimal()
+    
+    ggplotly(p_auto, tooltip = c("x", "y"))
   })
   
   # --- Output: Detail & Diagnostik Model ---

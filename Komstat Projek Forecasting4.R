@@ -131,21 +131,7 @@ ui <- navbarPage(
            )
   ),
   
-  # --- TAB 3: HASIL FORECAST (DIUBAH) ---
-  tabPanel("Hasil Forecast",
-           layout_columns(
-             col_widths = c(3, 9),
-             div(), 
-             div(
-               card(
-                 card_header("Plot Hasil Forecast ARIMA Otomatis"),
-                 plotlyOutput("forecastPlotAuto") %>% withSpinner()
-               )
-             )
-           )
-  ),
-  
-  # --- TAB 4: DETAIL & DIAGNOSTIK (DIUBAH) ---
+  # --- TAB 3: DETAIL & DIAGNOSTIK (DIUBAH) ---
   tabPanel("Detail & Diagnostik Model",
            layout_columns(
              # Menggunakan rasio 5:7 agar mendekati 40% untuk sidebar
@@ -192,6 +178,25 @@ ui <- navbarPage(
            )
   ),
   
+  # --- TAB 4: HASIL FORECAST (DIUBAH) ---
+  tabPanel("Hasil Forecast",
+           layout_columns(
+             col_widths = c(3, 9),
+             div(), 
+             div(
+               card(
+                 card_header("Plot Hasil Forecast ARIMA Otomatis"),
+                 plotlyOutput("forecastPlotAuto") %>% withSpinner()
+               ),
+               card(
+                 card_header("Tabel Hasil Peramalan"),
+                 DTOutput("forecastTable") %>% withSpinner()
+               )
+             )
+           )
+  ),
+  
+  # --- TAB 5: TENTANG (DIUBAH) ---
   tabPanel("Tentang",
            card(
              card_header("Tentang Aplikasi"),
@@ -478,7 +483,25 @@ server <- function(input, output, session) {
     
     ggplotly(p_auto, tooltip = c("x", "y"))
   })
-  
+
+  output$forecastTable <- renderDT({
+    req(model_forecast())
+    
+    fc_tbl <- model_forecast() %>% 
+      as_tibble() %>%
+      transmute(
+        `Tanggal` = as.character(observation_date),
+        `Forecast` = round(.mean, 2)
+      )
+    
+    datatable(
+      fc_tbl,
+      rownames = FALSE,
+      options = list(pageLength = 10, dom = 'tip'),
+      caption = "Tabel Forecast Model ARIMA"
+    )
+  })
+    
   # --- Output: Detail & Diagnostik Model ---
   output$accuracyTable <- renderDT({ req(model_evaluation()); datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model")})
   output$modelSpecText_detail <- renderText({ req(model_evaluation()); model_evaluation()$.model })

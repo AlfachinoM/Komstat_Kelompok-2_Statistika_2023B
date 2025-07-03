@@ -63,8 +63,6 @@ ui <- navbarPage(
                  hr(),
                  h5("Pengaturan untuk Tab Forecast:"),
                  numericInput("ahead", "Jumlah Tahun Ramalan:", 2, min = 1, max = 10),
-                 sliderInput("ci_level", "Tingkat Kepercayaan (CI %):", 
-                             min = 50, max = 99, value = 80, post = "%"),
                  actionButton("run_analysis", "Jalankan Analisis", icon = icon("play"), class = "btn-primary w-100")
                )
              ),

@@ -85,8 +85,22 @@ ui <- navbarPage(
            )
   ),
   
+  # --- TAB 2: UJI STASIONERITAS ---
   tabPanel("Uji Stasioneritas",
            br(),
+           
+           card(
+             card_header("Apa Itu Uji ADF?"),
+             HTML("
+             <p>Augmented Dickey-Fuller (ADF) Test adalah uji statistik untuk mengetahui apakah sebuah deret waktu <b>stasioner</b> atau tidak.</p>
+             <ul>
+               <li><b>Hipotesis nol (H₀):</b> Data tidak stasioner</li>
+               <li><b>Hipotesis alternatif (H₁):</b> Data stasioner</li>
+               <li><b>Kriteria:</b> Jika p-value < 0.05, maka data dianggap stasioner</li>
+             </ul>
+           ")
+           ),
+           
            card(
              card_header("Uji Stasioneritas (ADF Test)"),
              htmlOutput("stationarity_result")

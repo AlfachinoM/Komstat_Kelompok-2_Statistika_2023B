@@ -204,7 +204,49 @@ Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik. Tuj
 - Rachmawati Tefaaulia (1314623066)
 - Oki Ramadhan Pramono (1314623067)
 - Septiani Amalia Wulandari (1314623069)
-      ")
+    ")
+           ),
+           
+           card(
+             card_header("Penjelasan Model ARIMA dan SARIMA"),
+             markdown("
+### ARIMA (Autoregressive Integrated Moving Average)
+
+Model ARIMA adalah metode peramalan deret waktu yang menggabungkan tiga komponen utama:
+
+- **AR (Autoregressive):** Hubungan antara nilai saat ini dengan nilai-nilai sebelumnya (lag).
+- **I (Integrated):** Proses differencing data untuk menjadikannya stasioner, yaitu menghilangkan tren atau perubahan musiman.
+- **MA (Moving Average):** Hubungan antara nilai saat ini dan galat (kesalahan) model sebelumnya.
+
+Model ini ditulis dalam bentuk **ARIMA(p, d, q)**, di mana:
+- `p` = jumlah lag untuk komponen AR,
+- `d` = jumlah differencing untuk mencapai kestasioneran,
+- `q` = jumlah lag untuk komponen MA.
+
+ARIMA sangat efektif untuk data deret waktu yang **tidak memiliki pola musiman**.
+
+---
+
+### SARIMA (Seasonal ARIMA)
+
+Model SARIMA merupakan perluasan dari ARIMA untuk menangani pola **musiman** dalam data deret waktu. Ia menambahkan komponen musiman ke struktur ARIMA.
+
+SARIMA ditulis dalam bentuk **SARIMA(p, d, q)(P, D, Q)[s]**, di mana:
+
+#### Komponen Non-Musiman:
+- `p` = Autoregressive (jumlah lag nilai masa lalu)
+- `d` = Differencing (pengurangan agar stasioner)
+- `q` = Moving Average (lag galat masa lalu)
+
+#### Komponen Musiman:
+- `P` = Seasonal AR (lag musiman nilai masa lalu)
+- `D` = Seasonal Differencing
+- `Q` = Seasonal MA (galat musiman masa lalu)
+- `s` = Musim (jumlah periode per siklus, contoh `s=12` untuk data bulanan)
+
+SARIMA sangat cocok untuk data dengan **pola berulang musiman**, seperti data bulanan atau kuartalan.
+
+")
            )
   )
 )

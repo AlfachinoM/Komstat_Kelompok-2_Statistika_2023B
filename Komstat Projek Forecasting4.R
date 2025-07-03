@@ -100,13 +100,19 @@ ui <- navbarPage(
              
              # --- KONTEN KOLOM 1 (Sidebar) ---
              div(
-               h4("Pengaturan Ordo ARIMA (Manual)"),
-               numericInput("p_order", "Ordo p:", value = 1, min = 0, max = 5),
-               numericInput("d_order", "Ordo d:", value = 1, min = 0, max = 2),
-               numericInput("q_order", "Ordo q:", value = 1, min = 0, max = 5),
-               actionButton("run_manual_arima", "Gunakan Ordo Manual", icon = icon("cog"), class = "btn-info w-100")
+               h4("Pengaturan Ordo ARIMA (Manual / Otomatis)"),
+               textOutput("model_mode_text"),
+               checkboxInput("use_auto_arima", "Gunakan auto.arima()", value = TRUE),
+               checkboxInput("seasonal_arima", "Gunakan Seasonal ARIMA", value = FALSE),
+               conditionalPanel(
+                 condition = "!input.use_auto_arima",
+                 numericInput("p_order", "Ordo p:", value = 1, min = 0, max = 5),
+                 numericInput("d_order", "Ordo d:", value = 1, min = 0, max = 2),
+                 numericInput("q_order", "Ordo q:", value = 1, min = 0, max = 5)
+               ),
+               actionButton("run_manual_arima", "Bangun Model ARIMA", icon = icon("cog"), class = "btn-info w-100")
              ),
-             
+
              # --- KONTEN KOLOM 2 (Main Panel) ---
              card(
                card_header("Plot Hasil Forecast ARIMA"),
@@ -230,9 +236,25 @@ server <- function(input, output, session) {
   
   observeEvent(input$run_manual_arima, {
     req(train_data())
-    showNotification("Melatih model ARIMA dengan ordo manual...", type = "message", duration = 3)
-    model_manual <- train_data() %>% model(Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order)))
-    active_model(model_manual)
+    
+    tryCatch({
+      if (input$use_auto_arima) {
+        showNotification("Melatih model ARIMA otomatis...", type = "message", duration = 3)
+        model_auto <- train_data() %>% model(
+          Auto_ARIMA = ARIMA(price, seasonal = input$seasonal_arima)
+        )
+        active_model(model_auto)
+      } else {
+        showNotification("Melatih model ARIMA manual...", type = "message", duration = 3)
+        model_manual <- train_data() %>% model(
+          Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order),
+                               seasonal = input$seasonal_arima)
+        )
+        active_model(model_manual)
+      }
+    }, error = function(e) {
+      showNotification(paste("Gagal membangun model ARIMA:", e$message), type = "error", duration = 5)
+    })
   })
   
   # --- Reaktif untuk Evaluasi, Forecast, dll. ---
@@ -328,9 +350,37 @@ server <- function(input, output, session) {
   # --- Output: Detail & Diagnostik Model ---
   output$accuracyTable <- renderDT({ req(model_evaluation()); datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model")})
   output$modelSpecText_detail <- renderText({ req(model_evaluation()); model_evaluation()$.model })
+  output$model_mode_text <- renderText({
+    if (input$use_auto_arima) {
+      "MODE: Pemodelan Otomatis (auto.arima)"
+    } else {
+      paste0("MODE: Pemodelan Manual (p=", input$p_order, 
+             ", d=", input$d_order, ", q=", input$q_order, ")")
+    }
+  })
   output$modelMAPE <- renderText({ req(model_evaluation()); aic_val <- model_evaluation()$AIC; mape_val <- model_evaluation()$MAPE; paste0("AIC: ", aic_val, " | MAPE: ", mape_val, "%")})
   output$arimaReport <- renderPrint({
-    req(train_data())
+    req(active_model(), train_data())
+    
+    # --- Bagian 1: Ringkasan model aktif (dari tombol) ---
+    cat("=== Ringkasan Model yang Digunakan Saat Ini ===\n\n")
+    
+    model_tbl <- active_model()
+    model_name <- model_tbl$.model[1]
+    fitted_model <- model_tbl %>% select(!!sym(model_name)) %>% pull()
+    summary_obj <- summary(fitted_model[[1]])
+    
+    print(summary_obj)
+    
+    cat("\n--- Koefisien Model ---\n")
+    print(coef(fitted_model[[1]]))
+    
+    cat("\nAIC : ", round(summary_obj$aic, 2), "\n")
+    cat("BIC : ", round(BIC(fitted_model[[1]]), 2), "\n")
+    
+    cat("\n\n=== Interpretasi Tambahan Berdasarkan auto.arima() ===\n\n")
+    
+    # --- Bagian 2: Hasil dari auto.arima() khusus untuk penjelasan umum ---
     ts_data <- ts(train_data()$price, frequency = 12)
     model_summary <- auto.arima(ts_data)
     print(summary(model_summary))
@@ -345,6 +395,7 @@ server <- function(input, output, session) {
     cat("- Nilai AIC:", round(model_summary$aic, 2), "menunjukkan kualitas model (lebih kecil lebih baik).\n")
     cat("- Periksa residual (lihat tab diagnostik) untuk validasi asumsi white noise.\n")
   })
+  
   output$residualsPlot <- renderPlot({ req(active_model()); active_model() %>% gg_tsresiduals(lag_max = 24) })
   
   output$residualsDiagnostics <- renderPlot({

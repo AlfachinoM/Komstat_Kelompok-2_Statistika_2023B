@@ -402,8 +402,8 @@ server <- function(input, output, session) {
   #plot acf pacf difference
   output$diff_acf_pacf_plot <- renderPlotly({
     req(data_diff())
-    p_acf <- data_diff() %>% ACF(y = diff_price, lag_max = 36) %>% autoplot())
-    p_pacf <- data_diff() %>% PACF(y = diff_price, lag_max = 36) %>% autoplot())
+    p_acf <- data_diff() %>% ACF(y = diff_price, lag_max = 36) %>% autoplot() + labs(title = "ACF (Differenced Data)")
+    p_pacf <- data_diff() %>% PACF(y = diff_price, lag_max = 36) %>% autoplot() + labs(title = "PACF (Differenced Data)")
     subplot(ggplotly(p_acf), ggplotly(p_pacf), nrows = 2, shareX = TRUE, titleY = TRUE)
   })
   

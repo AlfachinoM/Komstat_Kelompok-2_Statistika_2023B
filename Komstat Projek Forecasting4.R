@@ -31,28 +31,22 @@ ui <- navbarPage(
     primary = "#87CEEB",
     base_font = font_google("Inter"),
     bg = "#f8f9fa",
-    fg = "#212529"  # warna teks gelap agar kontras
+    fg = "#212529"
   ),
   header = tagList(
     useShinyjs(),
     tags$head(
-      # Tambahkan file CSS custom (jika ada)
       tags$link(rel = "stylesheet", type = "text/css", href = "custom.css"),
-      # Tambahkan style background image
-      tags$style(HTML("body {background-image: url('bg-blue.jpg'); background-size: cover; background-attachment: fixed;}")
-      )
+      tags$style(HTML("body {background-image: url('bg-blue.jpg'); background-size: cover; background-attachment: fixed;}"))
     )
   ),
   collapsible = TRUE,
   inverse = FALSE,
   
-  # --- TAB 1: EKSPLORASI DATA (DIUBAH) ---
+  # --- TAB 1: EKSPLORASI DATA ---
   tabPanel("Eksplorasi Data",
-           # Mengganti layout_sidebar dengan layout_columns untuk full-width
            layout_columns(
-             col_widths = c(3, 9), # Sidebar 25%, Main Panel 75%
-             
-             # --- KONTEN UNTUK KOLOM 1 (Sidebar) ---
+             col_widths = c(3, 9),
              div(
                h4("Pengaturan Analisis"),
                card(
@@ -66,8 +60,6 @@ ui <- navbarPage(
                  actionButton("run_analysis", "Jalankan Analisis", icon = icon("play"), class = "btn-primary w-100")
                )
              ),
-             
-             # --- KONTEN UNTUK KOLOM 2 (Main Panel) ---
              div(
                uiOutput("exploration_instructions"),
                tabsetPanel(
@@ -87,8 +79,9 @@ ui <- navbarPage(
                  tabPanel("Pola Data (ACF/PACF)",
                           br(),
                           card(
-                            card_header("Plot ACF & PACF"),
-                            plotOutput("acfPacfPlot", height = "600px") %>% withSpinner()
+                            card_header("Plot ACF & PACF Interaktif"),
+                            ### --- DIPERBAIKI: Menggunakan plotlyOutput --- ###
+                            plotlyOutput("acfPacfPlot", height = "600px") %>% withSpinner()
                           )
                  ),
                  tabPanel("Dekomposisi & Kestasioneran",
@@ -110,7 +103,6 @@ ui <- navbarPage(
   # --- TAB 2: UJI STASIONERITAS ---
   tabPanel("Uji Stasioneritas",
            br(),
-           
            card(
              card_header("Apa Itu Uji ADF?"),
              HTML("
@@ -122,22 +114,17 @@ ui <- navbarPage(
              </ul>
            ")
            ),
-           
            card(
              card_header("Uji Stasioneritas (ADF Test)"),
              htmlOutput("stationarity_result"),
-             uiOutput("diff_plot_ui"),
-             plotOutput("diff_acf_pacf_plot")
+             uiOutput("diff_plot_ui")
            )
   ),
   
-  # --- TAB 3: DETAIL & DIAGNOSTIK (DIUBAH) ---
+  # --- TAB 3: DETAIL & DIAGNOSTIK ---
   tabPanel("Detail & Diagnostik Model",
            layout_columns(
-             # Menggunakan rasio 5:7 agar mendekati 40% untuk sidebar
              col_widths = c(5, 7),
-             
-             # --- KONTEN KOLOM 1 (Sidebar) ---
              div(
                h4("Evaluasi Model ARIMA"),
                value_box(
@@ -163,8 +150,6 @@ ui <- navbarPage(
                  verbatimTextOutput("residual_summary") %>% withSpinner()
                )
              ),
-             
-             # --- KONTEN KOLOM 2 (Main Panel) ---
              div(
                card(
                  card_header("Laporan Model ARIMA"),
@@ -178,7 +163,7 @@ ui <- navbarPage(
            )
   ),
   
-  # --- TAB 4: HASIL FORECAST (DIUBAH) ---
+  # --- TAB 4: HASIL FORECAST ---
   tabPanel("Hasil Forecast",
            layout_columns(
              col_widths = c(3, 9),
@@ -197,7 +182,7 @@ ui <- navbarPage(
            )
   ),
   
-  # --- TAB 5: TENTANG (DIUBAH) ---
+  # --- TAB 5: TENTANG ---
   tabPanel("Tentang",
            card(
              card_header("Tentang Aplikasi"),
@@ -224,8 +209,7 @@ Aplikasi ini dirancang sebagai proyek akhir mata kuliah Komputasi Statistik. Tuj
   )
 )
 
-# --- SERVER (GABUNGAN & FINAL) ---
-# SERVER TETAP SAMA, TIDAK PERLU DIUBAH
+# --- SERVER ---
 server <- function(input, output, session) {
   
   # --- UI Dinamis & Data Processing ---
@@ -264,13 +248,6 @@ server <- function(input, output, session) {
     active_model(model_auto)
   })
   
-  observeEvent(input$run_manual_arima, {
-    req(train_data())
-    showNotification("Melatih model ARIMA dengan ordo manual...", type = "message", duration = 3)
-    model_manual <- train_data() %>% model(Manual_ARIMA = ARIMA(price ~ pdq(input$p_order, input$d_order, input$q_order)))
-    active_model(model_manual)
-  })
-  
   # --- Reaktif untuk Evaluasi, Forecast, dll. ---
   model_evaluation <- reactive({
     req(active_model(), dataset_ts())
@@ -297,340 +274,197 @@ server <- function(input, output, session) {
   output$exploration_instructions <- renderUI({if (!isTruthy(input$run_analysis)) h4("Silakan unggah file...", style = "text-align: center; color: grey;")})
   output$summaryStats <- renderPrint({ req(dataset_ts()); data <- dataset_ts(); cat("Ringkasan Statistik untuk Kolom '", input$value_col, "'\n\n", sep=""); summary(data$price) })
   output$tsPlot <- renderPlotly({ req(dataset_ts()); p <- dataset_ts() %>% autoplot(price) + labs(title = paste("Plot Time Series:", input$value_col), y = input$value_col, x = "Tanggal"); ggplotly(p, tooltip = "y") })
-  output$acfPacfPlot <- renderPlot({ req(dataset_ts()); dataset_ts() %>% gg_tsdisplay(y = price, plot_type = 'partial', lag_max = 36) + labs(title = "ACF & PACF") })
+  
+  ### --- DIPERBAIKI: Menggunakan renderPlotly dan subplot() --- ###
+  output$acfPacfPlot <- renderPlotly({
+    req(dataset_ts())
+    p_acf <- dataset_ts() %>% ACF(y = price, lag_max = 36) %>% autoplot() + labs(title = "Autocorrelation Function (ACF)")
+    p_pacf <- dataset_ts() %>% PACF(y = price, lag_max = 36) %>% autoplot() + labs(title = "Partial Autocorrelation Function (PACF)")
+    subplot(ggplotly(p_acf), ggplotly(p_pacf), nrows = 2, shareX = TRUE, titleY = TRUE) %>%
+      layout(title = list(text = "ACF & PACF untuk Data Asli", y = 0.95))
+  })
+  
   output$dcompPlot <- renderPlotly({ req(dataset_ts()); p <- dataset_ts() %>% model(STL(price)) %>% components() %>% autoplot() + labs(title = "Dekomposisi STL"); ggplotly(p) })
   
   output$rollingStatsPlot <- renderPlotly({
     req(dataset_ts())
-    validate(need(nrow(dataset_ts()) >= 2, "Data tidak cukup untuk statistik bergerak (min. 2)."))
+    validate(need(nrow(dataset_ts()) >= 12, "Data tidak cukup untuk statistik bergerak (min 12)."))
     
     rolling_data <- dataset_ts() %>%
       mutate(
-        rolling_mean = slider::slide_dbl(price, ~mean(.x, na.rm = TRUE), .before = 11),
-        rolling_sd   = slider::slide_dbl(price, ~sd(.x, na.rm = TRUE), .before = 11)
+        rolling_mean = slider::slide_dbl(price, ~mean(.x, na.rm = TRUE), .before = 11, .complete = TRUE),
+        rolling_sd   = slider::slide_dbl(price, ~sd(.x, na.rm = TRUE), .before = 11, .complete = TRUE)
       ) %>% drop_na()
     
-    plot_data_mean <- rolling_data %>%
-      select(observation_date, `Nilai Aktual` = price, `Rata-rata Bergerak` = rolling_mean) %>%
-      pivot_longer(cols = -observation_date, names_to = "Metrik", values_to = "Nilai")
+    p1 <- plot_ly(rolling_data, x = ~observation_date) %>%
+      add_lines(y = ~price, name = "Nilai Aktual", line = list(color = 'grey')) %>%
+      add_lines(y = ~rolling_mean, name = "Rata-rata Bergerak", line = list(color = '#007bff')) %>%
+      layout(title = "Nilai Aktual & Rata-rata Bergerak", yaxis = list(title = "Nilai"))
     
-    p1 <- ggplot(plot_data_mean, aes(x = observation_date, y = Nilai, color = Metrik)) +
-      geom_line(linewidth = 0.8) +
-      labs(title = "Nilai Aktual & Rata-rata Bergerak", x = NULL, y = "Nilai") +
-      theme_minimal() +
-      scale_color_manual(values = c("Rata-rata Bergerak" = "#007bff", "Nilai Aktual" = "grey50"))
-    
-    p2 <- ggplot(rolling_data, aes(x = observation_date, y = rolling_sd)) +
-      geom_line(linewidth = 0.8, color = "#dc3545") +
-      labs(title = "Standar Deviasi Bergerak (12-Bulan)", x = "Tanggal", y = "St. Deviasi") +
-      theme_minimal()
+    p2 <- plot_ly(rolling_data, x = ~observation_date, y = ~rolling_sd, type = 'scatter', mode = 'lines', name = "St. Deviasi Bergerak", line = list(color = '#dc3545')) %>%
+      layout(title = "Standar Deviasi Bergerak (12-Bulan)", yaxis = list(title = "St. Deviasi"))
     
     subplot(p1, p2, nrows = 2, shareX = TRUE, titleY = TRUE) %>%
       layout(title = list(text = "Analisis Kestasioneran Visual", y = 0.98),
-             legend = list(orientation = "h", y = 1.05, x = 0.5, xanchor = "center"))
+             legend = list(orientation = "h", y = 1.1, x = 0.5, xanchor = "center"))
   })
   
   # --- Output: Hasil Uji Stasioneritas ADF ---
+  d_order <- reactive({ req(dataset_ts()); ndiffs(na.omit(as.numeric(dataset_ts()$price)), test = "adf") })
+  
+  data_diff <- reactive({
+    req(dataset_ts(), d_order())
+    if(d_order() == 0) return(NULL)
+    dataset_ts() %>% mutate(diff_price = difference(price, d_order())) %>% drop_na()
+  })
+  
   output$stationarity_result <- renderUI({ 
-    req(dataset_ts())
+    req(dataset_ts(), d_order())
     
     ts_data <- na.omit(as.numeric(dataset_ts()$price))
-    validate(need(length(ts_data) > 0, "Kolom nilai tidak memiliki data numerik yang valid."))
-    
-    #Test ADF
-    d_rekomendasi <- ndiffs(ts_data, test = "adf")
-    ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
+    ts_diff <- if (d_order() > 0) diff(ts_data, differences = d_order()) else ts_data
     
     adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
-    if (is.null(adf_result)) {
-      return(HTML("<h4>Uji ADF tidak dapat dilakukan.</h4><p>Kemungkinan data terlalu sedikit setelah differencing.</p>"))
-    }
+    if (is.null(adf_result)) return(HTML("<h4>Uji ADF tidak dapat dilakukan.</h4>"))
     
     p_val <- adf_result$p.value
     status <- if (p_val < 0.05) "<span style='color:green; font-weight:bold;'>STASIONER</span>" else "<span style='color:orange; font-weight:bold;'>TIDAK STASIONER</span>"
     p_val_text <- if(p_val < 0.01) "< 0.01" else round(p_val, 4)
     
     HTML(paste0(
-      "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
-      "<ul>",
-      "<li><b>Rekomendasi differencing (d):</b> ", d_rekomendasi, " → ", 
-      if (d_rekomendasi == 0) {
-        "data sudah stasioner, tidak perlu dilakukan differencing."
-      } else {
-        paste("data belum stasioner, perlu dilakukan differencing sebanyak", d_rekomendasi, "kali.")
-      }, 
-      "</li>",
+      "<h4>Hasil Uji Stasioneritas (ADF)</h4><ul>",
+      "<li><b>Rekomendasi differencing (d):</b> ", d_order(), "</li>",
       "<li><b>Statistik Uji (setelah differencing):</b> ", round(adf_result$statistic, 4), "</li>",
       "<li><b>p-value:</b> ", p_val_text, "</li>",
-      "<li><b>Kesimpulan:</b> Setelah differencing ke-", d_rekomendasi, ", data dianggap ", status, ".</li>",
-      "</ul>"
+      "<li><b>Kesimpulan:</b> Setelah differencing, data dianggap ", status, ".</li></ul>"
     ))
   })
   
-  # --- Output: UI Plot Differencing (hanya jika d > 0) ---
+  ### --- DIPERBAIKI: Logika UI dinamis yang menampilkan plotly --- ###
   output$diff_plot_ui <- renderUI({
-    req(dataset_ts())
+    req(d_order())
+    if (d_order() == 0) return(card(card_header("Differencing Tidak Diperlukan"), HTML("<p>Data sudah stasioner.</p>")))
     
-    ts_data <- dataset_ts()$price
-    ts_data <- na.omit(as.numeric(ts_data))
-    d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
-    
-    # Jika differencing tidak diperlukan
-    if (d == 0) {
-      return(card(
-        card_header("Differencing Tidak Diperlukan"),
-        HTML("<p>Data sudah stasioner, sehingga <b>tidak dilakukan differencing</b>.</p>")
-      ))
-    }
-    
-    #differencing
-    ts_diff <- if (d > 0) diff(ts_data, differences = d) else ts_data
-    adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
-    req(adf_result)
-    
-    if (adf_result$p.value >= 0.05) {
-      return(NULL)  # Tidak stasioner, belum ditindaklanjuti
-    }
-    
-    # Jika stasioner setelah differencing, tampilkan dua plot:
     tagList(
-      card(
-        card_header(paste("Plot Setelah Differencing ke-", d)),
-        plotlyOutput("diff_plot") %>% withSpinner()
-      ),
-      card(
-        card_header(paste("ACF & PACF Setelah Differencing ke-", d)),
-        plotOutput("diff_acf_pacf_plot", height = "600px") %>% withSpinner()
-      )
+      card(card_header(paste("Plot Setelah Differencing ke-", d_order())), plotlyOutput("diff_plot") %>% withSpinner()),
+      card(card_header(paste("ACF & PACF Setelah Differencing ke-", d_order())), plotlyOutput("diff_acf_pacf_plot", height = "600px") %>% withSpinner())
     )
-    
-    if (d == 0) {
-      return(card(
-        card_header("Differencing Tidak Diperlukan"),
-        HTML("<p>Data sudah stasioner, sehingga <b>tidak dilakukan differencing</b>.</p>")
-      ))
-    } else {
-      return(card(
-        card_header(paste("Plot Setelah Differencing ke-", d)),
-        plotlyOutput("diff_plot") %>% withSpinner()
-      ))
-    }
   })
   
-  # --- Output: Plot Differencing ---
   output$diff_plot <- renderPlotly({
-    req(dataset_ts())
-    
-    ts_data <- dataset_ts()$price
-    ts_data <- na.omit(as.numeric(ts_data))
-    d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
-    req(d > 0)
-    
-    ts_diff <- diff(ts_data, differences = d)
-    tanggal_diff <- dataset_ts()$observation_date[-(1:d)]
-    
-    df <- tibble(
-      Tanggal = tanggal_diff,
-      Data_Differenced = ts_diff
-    )
-    
-    p <- ggplot(df, aes(x = Tanggal, y = Data_Differenced)) +
-      geom_line(color = "#E69F00") +
-      labs(title = paste("Plot Data Setelah Differencing ke-", d),
-           x = "Tanggal", y = "Nilai") +
-      theme_minimal()
-    
+    req(data_diff())
+    p <- data_diff() %>% autoplot(diff_price) + labs(title = NULL, y = "Nilai Hasil Differencing", x = "Tanggal")
     ggplotly(p)
   })
   
-  output$diff_acf_pacf_plot <- renderPlot({
-    req(dataset_ts())
-    ts_data <- na.omit(as.numeric(dataset_ts()$price))
-    d <- ndiffs(ts_data, test = "adf")
-    req(d > 0)
-    
-    ts_diff <- diff(ts_data, differences = d)
-    tanggal_diff <- dataset_ts()$observation_date[-(1:d)]
-    
-    tsibble_diff <- tibble(
-      observation_date = tanggal_diff,
-      price = ts_diff
-    ) %>% as_tsibble(index = observation_date)
-    
-    gg_tsdisplay(tsibble_diff, y = price, plot_type = 'partial', lag_max = 36) +
-      labs(title = paste("ACF & PACF Data Setelah Differencing ke-", d))
+  ### --- DIPERBAIKI: Menggunakan renderPlotly untuk plot differencing --- ###
+  output$diff_acf_pacf_plot <- renderPlotly({
+    req(data_diff())
+    p_acf <- data_diff() %>% ACF(y = diff_price, lag_max = 36) %>% autoplot() + labs(title = "ACF (Differenced Data)")
+    p_pacf <- data_diff() %>% PACF(y = diff_price, lag_max = 36) %>% autoplot() + labs(title = "PACF (Differenced Data)")
+    subplot(ggplotly(p_acf), ggplotly(p_pacf), nrows = 2, shareX = TRUE, titleY = TRUE)
   })
   
-  
-  #---HASIL FORECASST---
-  active_model <- reactiveVal()
-  
-  observeEvent(train_data(), {
-    req(train_data())
-    showNotification("Melatih model ARIMA otomatis...", type = "message", duration = 3)
-    model_auto <- train_data() %>% model(Auto_ARIMA = ARIMA(price))
-    active_model(model_auto)
-  })
-  
-  # --- Output: Hasil Forecast untuk Model Auto ARIMA ---
+  #---HASIL FORECAST---
   output$forecastPlotAuto <- renderPlotly({
-    req(active_model())
-    horizon <- paste0(input$ahead, " years")
-    fc_auto <- active_model() %>% forecast(h = horizon)
-    
-    p_auto <- fc_auto %>% autoplot(train_data(), level = input$ci_level) +
+    req(model_forecast())
+    p_auto <- model_forecast() %>% autoplot(dataset_ts()) +
       labs(title = "Hasil Forecast ARIMA Otomatis", y = input$value_col, x = "Tahun dan Bulan") +
       theme_minimal()
-    
     ggplotly(p_auto, tooltip = c("x", "y"))
   })
-
+  
   output$interpretasiForecastAuto <- renderUI({
     req(model_evaluation(), input$value_col)
     eval <- model_evaluation()
-    model_spec <- eval$.model
-    aic_val <- eval$AIC
-    mape_val <- eval$MAPE
-    horizon_text <- paste(input$ahead, "tahun ke depan")
-  
     interpret_mape <- case_when(
-      mape_val < 10 ~ "<b>Sangat Baik</b>: Error peramalan sangat rendah.",
-      mape_val < 20 ~ "<b>Baik</b>: Error peramalan cukup rendah dan dapat diterima.",
-      mape_val < 50 ~ "<b>Cukup:</b> Hasil forecast dapat digunakan dengan kehati-hatian.",
+      eval$MAPE < 10 ~ "<b>Sangat Baik</b>: Error peramalan sangat rendah.",
+      eval$MAPE < 20 ~ "<b>Baik</b>: Error peramalan cukup rendah dan dapat diterima.",
+      eval$MAPE < 50 ~ "<b>Cukup:</b> Hasil forecast dapat digunakan dengan kehati-hatian.",
       TRUE          ~ "<b>Buruk:</b> Model mungkin kurang cocok, error tinggi."
     )
-  
     HTML(paste0(
-      "<div style='margin-top:20px;'>",
-      "<h4>📈 Interpretasi Hasil Forecast ARIMA Otomatis</h4>",
-      "<p>Model <b>", model_spec, "</b> berhasil membentuk prediksi ", horizon_text, 
-      " untuk variabel <b>", input$value_col, "</b>.</p>",
-      "<ul>",
-      "<li><b>AIC:</b> ", round(aic_val, 2), " → Semakin rendah, semakin baik model dalam menyesuaikan data.</li>",
-      "<li><b>MAPE:</b> ", round(mape_val, 2), "% → ", interpret_mape, "</li>",
-      "</ul>",
-      "<p>Model ini cocok digunakan untuk mengambil keputusan berbasis data time series karena tingkat error-nya berada pada level yang dapat diterima.</p>",
-      "</div>"
+      "<div style='margin-top:20px; padding: 15px;'>",
+      "<h4>📈 Interpretasi Hasil Forecast</h4>",
+      "<p>Model <b>", eval$.model, "</b> digunakan untuk memprediksi <b>", input$ahead, " tahun ke depan</b>.</p>",
+      "<ul><li><b>MAPE:</b> ", eval$MAPE, "% → ", interpret_mape, "</li></ul></div>"
     ))
   })
-
+  
   output$forecastTable <- renderDT({
     req(model_forecast())
     
-    fc_tbl <- model_forecast() %>% 
+    model_forecast() %>%
+      hilo(level = c(80, 95)) %>%
+      unpack_hilo(`80%`) %>%
+      unpack_hilo(`95%`) %>%
       as_tibble() %>%
       transmute(
-        `Tanggal` = as.character(observation_date),
-        `Forecast` = round(.mean, 2)
-      )
-    
-    datatable(
-      fc_tbl,
-      rownames = FALSE,
-      options = list(pageLength = 10, dom = 'tip'),
-      caption = "Tabel Forecast Model ARIMA"
-    )
+        Tanggal = as.character(observation_date),
+        Forecast = round(.mean, 2),
+        `Batas Bawah (80%)` = round(`80%_lower`, 2),
+        `Batas Atas (80%)` = round(`80%_upper`, 2),
+        `Batas Bawah (95%)` = round(`95%_lower`, 2),
+        `Batas Atas (95%)` = round(`95%_upper`, 2)
+      ) %>%
+      datatable(rownames = FALSE, options = list(pageLength = 12, dom = 'tip'), caption = "Tabel Rincian Hasil Peramalan")
   })
-    
+  
   # --- Output: Detail & Diagnostik Model ---
   output$accuracyTable <- renderDT({ req(model_evaluation()); datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model")})
   output$modelSpecText_detail <- renderText({ req(model_evaluation()); model_evaluation()$.model })
   output$modelMAPE <- renderText({ req(model_evaluation()); aic_val <- model_evaluation()$AIC; mape_val <- model_evaluation()$MAPE; paste0("AIC: ", aic_val, " | MAPE: ", mape_val, "%")})
-  output$arimaReport <- renderPrint({
-    req(train_data())
-    ts_data <- ts(train_data()$price, frequency = 12)
-    model_summary <- auto.arima(ts_data)
-    print(summary(model_summary))
-    
-    cat("\n--- Interpretasi Umum ---\n")
-    cat("Model ARIMA(", paste(model_summary$arma[1:3], collapse = ","), ")",
-        "dengan ordo:\n",
-        "• p (AR)  =", model_summary$arma[1], "\n",
-        "• d       =", model_summary$arma[6], "\n",
-        "• q (MA)  =", model_summary$arma[2], "\n\n")
-    cat("Interpretasi:\n")
-    cat("- Nilai AIC:", round(model_summary$aic, 2), "menunjukkan kualitas model (lebih kecil lebih baik).\n")
-    cat("- Periksa residual (lihat tab diagnostik) untuk validasi asumsi white noise.\n")
-  })
+  
+  output$arimaReport <- renderPrint({ req(active_model()); report(active_model()) })
   output$residualsPlot <- renderPlot({ req(active_model()); active_model() %>% gg_tsresiduals(lag_max = 24) })
   
   output$residualsDiagnostics <- renderPlot({
     req(active_model())
+    diag_data <- left_join(residuals(active_model()), fitted(active_model()), by = c(".model", "observation_date"))
     
-    resid_df <- residuals(active_model()) %>% as_tibble()
-    fitted_df <- fitted(active_model()) %>% as_tibble()
-    
-    residuals_vec <- resid_df$.resid
-    fitted_vec <- fitted_df$.fitted
-    
-    p1 <- ggplot(data.frame(fitted = fitted_vec, residuals = residuals_vec), aes(x = fitted, y = residuals)) + 
-      geom_point(color = "steelblue") + 
-      geom_hline(yintercept = 0, linetype = "dashed", color = "red") + 
-      labs(title = "Plot Residual vs Fitted", x = "Fitted Values", y = "Residuals") + 
-      theme_minimal()
-    
-    p2 <- ggplot(data.frame(residuals = residuals_vec), aes(x = residuals)) + 
-      geom_histogram(bins = 30, fill = "orange", alpha = 0.7, color = "black") + 
-      labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency") + 
-      theme_minimal()
-    
-    p3 <- ggplot(data.frame(residuals = residuals_vec), aes(sample = residuals)) + 
-      stat_qq() + 
-      stat_qq_line() + 
-      labs(title = "Q-Q Plot of Residuals") + 
-      theme_minimal()
-    
-    (p1 / p2 / p3) + plot_layout(ncol = 1)
+    p1 <- ggplot(diag_data, aes(x = .fitted, y = .resid)) + geom_point(color = "steelblue") + geom_hline(yintercept = 0, linetype = "dashed", color = "red") + labs(title = "Plot Residual vs Fitted", x = "Fitted Values", y = "Residuals")
+    p2 <- ggplot(diag_data, aes(x = .resid)) + geom_histogram(bins = 30, fill = "orange", alpha = 0.7) + labs(title = "Histogram of Residuals", x = "Residuals", y = "Frequency")
+    p3 <- ggplot(diag_data, aes(sample = .resid)) + stat_qq() + stat_qq_line() + labs(title = "Q-Q Plot of Residuals")
+    (p1 / p2 / p3) + plot_layout(ncol = 1) & theme_minimal()
   })
   
   output$ljung_box_test <- renderPrint({
     req(active_model())
-    resids_vec <- residuals(active_model()) %>% pull(.resid)
-    validate(need(length(na.omit(resids_vec)) > 0, "Residual tidak dapat dihitung."))
-    model_params <- active_model() %>% glance()
-    p <- if ("p" %in% names(model_params)) model_params$p else 0
-    q <- if ("q" %in% names(model_params)) model_params$q else 0
-    fitdf <- p + q
-    lb_test <- Box.test(resids_vec, lag = 12, type = "Ljung-Box", fitdf = fitdf)
+    lb_test <- residuals(active_model()) %>% features(.resid, ljung_box, lag = 12)
     cat("Uji Ljung-Box untuk Autokorelasi Residual:\n\n")
-    cat("  X-squared  :", round(lb_test$statistic, 4), "\n")
-    cat("  lag        :", 12, "\n")
-    cat("  df         :", lb_test$parameter, "\n")
-    cat("  p-value    :", round(lb_test$p.value, 4), "\n")
-    if(lb_test$p.value > 0.05) {cat("\n→ Kesimpulan: Tidak ada bukti kuat autokorelasi pada residual.")} else {cat("\n→ Kesimpulan: Terdapat autokorelasi pada residual.")}
+    cat("  X-squared  :", round(lb_test$lb_stat, 4), "\n")
+    cat("  df         :", lb_test$dof, "\n")
+    cat("  p-value    :", round(lb_test$lb_pvalue, 4), "\n")
+    if(lb_test$lb_pvalue > 0.05) {cat("\n→ Kesimpulan: Tidak ada bukti kuat autokorelasi pada residual.")} else {cat("\n→ Kesimpulan: Terdapat autokorelasi pada residual.")}
   })
   
   output$residual_summary <- renderPrint({
     req(active_model())
     resids <- na.omit(residuals(active_model())$.resid)
-    fitted_vals <- na.omit(fitted(active_model())$.fitted)
     validate(need(length(resids) > 5, "Tidak cukup residual untuk pengujian."))
     
-    acf_res <- acf(resids, plot = FALSE)
-    acf_table <- data.frame(Lag = acf_res$lag, ACF = round(acf_res$acf, 3))
-    
-    shapiro_test <- shapiro.test(resids)
-    bp_test_result <- tryCatch(bptest(resids ~ fitted_vals), error = function(e) NULL)
+    shapiro_test <- if(length(resids) > 5000) list(p.value = NA) else shapiro.test(resids)
+    bp_test_result <- tryCatch(bptest(resids ~ fitted(active_model())$.fitted), error = function(e) NULL)
     
     cat("Ringkasan Diagnostik Asumsi Residual:\n\n")
     cat("1. Uji Normalitas (Shapiro-Wilk Test):\n")
-    cat("   - p-value:", round(shapiro_test$p.value, 4), "→", if (shapiro_test$p.value < 0.05) "Residual TIDAK normal" else "Residual normal", "\n")
+    if(is.na(shapiro_test$p.value)) {
+      cat("   - Uji tidak dilakukan (data > 5000).\n")
+    } else {
+      cat("   - p-value:", round(shapiro_test$p.value, 4), "→", if (shapiro_test$p.value < 0.05) "Residual TIDAK normal" else "Residual normal", "\n")
+    }
     
     cat("\n2. Uji Homoskedastisitas (Breusch-Pagan Test):\n")
     if (is.null(bp_test_result)) {
-      cat("   - Uji tidak dapat dilakukan (kemungkinan nilai fitted konstan).\n")
+      cat("   - Uji tidak dapat dilakukan.\n")
     } else {
-      cat("   - p-value:", round(bp_test_result$p.value, 4), "→", if (bp_test_result$p.value < 0.05) "Terdapat Heteroskedastisitas" else "Tidak ada Heteroskedastisitas (Homoskedastis)", "\n")
+      cat("   - p-value:", round(bp_test_result$p.value, 4), "→", if (bp_test_result$p.value < 0.05) "Terdapat Heteroskedastisitas" else "Homoskedastis", "\n")
     }
-    
-    cat("\n3. Autokorelasi (ACF 10 lag pertama):\n")
-    print(head(acf_table, 10))
   })
   
   output$eval_interpretation <- renderUI({
     req(model_evaluation())
-    eval_data <- model_evaluation()
-    mape_val <- eval_data$MAPE
+    mape_val <- model_evaluation()$MAPE
     
     mape_interp <- case_when(
       mape_val < 10  ~ "<b>Sangat Baik</b>: Rata-rata kesalahan peramalan kurang dari 10% dari nilai aktual.",

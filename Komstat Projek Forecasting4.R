@@ -139,7 +139,8 @@ ui <- navbarPage(
              div(
                card(
                  card_header("Plot Hasil Forecast ARIMA Otomatis"),
-                 plotlyOutput("forecastPlotAuto") %>% withSpinner()
+                 plotlyOutput("forecastPlotAuto") %>% withSpinner(),
+                 htmlOutput("interpretasiForecastAuto")
                )
              )
            )
@@ -478,6 +479,35 @@ server <- function(input, output, session) {
     
     ggplotly(p_auto, tooltip = c("x", "y"))
   })
+  output$interpretasiForecastAuto <- renderUI({
+    req(model_evaluation(), input$value_col)
+    eval <- model_evaluation()
+    model_spec <- eval$.model
+    aic_val <- eval$AIC
+    mape_val <- eval$MAPE
+    horizon_text <- paste(input$ahead, "tahun ke depan")
+    
+    interpret_mape <- case_when(
+      mape_val < 10 ~ "<b>Sangat Baik</b>: Error peramalan sangat rendah.",
+      mape_val < 20 ~ "<b>Baik</b>: Error peramalan cukup rendah dan dapat diterima.",
+      mape_val < 50 ~ "<b>Cukup:</b> Hasil forecast dapat digunakan dengan kehati-hatian.",
+      TRUE          ~ "<b>Buruk:</b> Model mungkin kurang cocok, error tinggi."
+    )
+    
+    HTML(paste0(
+      "<div style='margin-top:20px;'>",
+      "<h4>📈 Interpretasi Hasil Forecast ARIMA Otomatis</h4>",
+      "<p>Model <b>", model_spec, "</b> berhasil membentuk prediksi ", horizon_text, 
+      " untuk variabel <b>", input$value_col, "</b>.</p>",
+      "<ul>",
+      "<li><b>AIC:</b> ", round(aic_val, 2), " → Semakin rendah, semakin baik model dalam menyesuaikan data.</li>",
+      "<li><b>MAPE:</b> ", round(mape_val, 2), "% → ", interpret_mape, "</li>",
+      "</ul>",
+      "<p>Model ini cocok digunakan untuk mengambil keputusan berbasis data time series karena tingkat error-nya berada pada level yang dapat diterima.</p>",
+      "</div>"
+    ))
+  })
+  
   
   # --- Output: Detail & Diagnostik Model ---
   output$accuracyTable <- renderDT({ req(model_evaluation()); datatable(model_evaluation(), options = list(dom = 't', ordering = FALSE), rownames = FALSE, caption = "Tabel Evaluasi Model")})

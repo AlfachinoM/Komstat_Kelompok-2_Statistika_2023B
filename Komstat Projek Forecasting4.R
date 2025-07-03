@@ -162,7 +162,7 @@ ui <- navbarPage(
                ),
                card(
                  card_header("Diagnostik Lanjutan"),
-                 plotOutput("residualsDiagnostics", height="600px") %>% withSpinner(),
+                 plotOutput("residualsDiagnostics", height="500px") %>% withSpinner(),
                  tags$hr(),
                  verbatimTextOutput("ljung_box_test") %>% withSpinner(),
                  verbatimTextOutput("residual_summary") %>% withSpinner()

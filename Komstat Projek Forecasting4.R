@@ -94,7 +94,8 @@ ui <- navbarPage(
            
            card(
              card_header("Uji Stasioneritas (ADF Test)"),
-             htmlOutput("stationarity_result")
+             htmlOutput("stationarity_result"),
+             uiOutput("diff_plot_ui")
            )
   ),
 
@@ -287,65 +288,65 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
 
-# --- Output: Hasil Uji Stasioneritas ADF ---
-output$stationarity_result <- renderUI({ 
-  req(dataset_ts())
-
-  ts_data <- na.omit(as.numeric(dataset_ts()$price))
-  validate(need(length(ts_data) > 0, "Kolom nilai tidak memiliki data numerik yang valid."))
-
-  #Uji ADF
-  d_rekomendasi <- ndiffs(ts_data, test = "adf")
-  ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
-
-  adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
-  if (is.null(adf_result)) {
-    return(HTML("<h4>Uji ADF tidak dapat dilakukan.</h4><p>Kemungkinan data terlalu sedikit setelah differencing.</p>"))
-  }
-
-  p_val <- adf_result$p.value
-  status <- if (p_val < 0.05) "<span style='color:green; font-weight:bold;'>STASIONER</span>" else "<span style='color:orange; font-weight:bold;'>TIDAK STASIONER</span>"
-  p_val_text <- if(p_val < 0.01) "< 0.01" else round(p_val, 4)
-
-  HTML(paste0(
-    "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
-    "<ul>",
-    "<li><b>Rekomendasi differencing (d):</b> ", d_rekomendasi, "</li>",
-    "<li><b>Statistik Uji (setelah differencing):</b> ", round(adf_result$statistic, 4), "</li>",
-    "<li><b>p-value:</b> ", p_val_text, "</li>",
-    "<li><b>Kesimpulan:</b> Data dianggap ", status, ".</li>",
-    "</ul>"
-  ))
-})
-
-#Output: UI Plot Differencing (hanya jika d > 0)
-output$diff_plot_ui <- renderUI({
-  req(dataset_ts())
-
-  ts_data <- dataset_ts()$price
-  ts_data <- na.omit(as.numeric(ts_data))
-  d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
-
-  ts_diff <- if (d > 0) diff(ts_data, differences = d) else ts_data
-  adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
-  req(adf_result)
-
-  if (adf_result$p.value >= 0.05) {
-    return(NULL)  # Tidak stasioner, belum ditindaklanjuti
-  }
-
-  if (d == 0) {
-    return(card(
-      card_header("Differencing Tidak Diperlukan"),
-      HTML("<p>Data sudah stasioner, sehingga <b>tidak dilakukan differencing</b>.</p>")
+  # --- Output: Hasil Uji Stasioneritas ADF ---
+  output$stationarity_result <- renderUI({ 
+    req(dataset_ts())
+  
+    ts_data <- na.omit(as.numeric(dataset_ts()$price))
+    validate(need(length(ts_data) > 0, "Kolom nilai tidak memiliki data numerik yang valid."))
+  
+    #Uji ADF
+    d_rekomendasi <- ndiffs(ts_data, test = "adf")
+    ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
+  
+    adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
+    if (is.null(adf_result)) {
+      return(HTML("<h4>Uji ADF tidak dapat dilakukan.</h4><p>Kemungkinan data terlalu sedikit setelah differencing.</p>"))
+    }
+  
+    p_val <- adf_result$p.value
+    status <- if (p_val < 0.05) "<span style='color:green; font-weight:bold;'>STASIONER</span>" else "<span style='color:orange; font-weight:bold;'>TIDAK STASIONER</span>"
+    p_val_text <- if(p_val < 0.01) "< 0.01" else round(p_val, 4)
+  
+    HTML(paste0(
+      "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
+      "<ul>",
+      "<li><b>Rekomendasi differencing (d):</b> ", d_rekomendasi, "</li>",
+      "<li><b>Statistik Uji (setelah differencing):</b> ", round(adf_result$statistic, 4), "</li>",
+      "<li><b>p-value:</b> ", p_val_text, "</li>",
+      "<li><b>Kesimpulan:</b> Data dianggap ", status, ".</li>",
+      "</ul>"
     ))
-  } else {
-    return(card(
-      card_header(paste("Plot Setelah Differencing ke-", d)),
-      plotlyOutput("diff_plot") %>% withSpinner()
-    ))
-  }
-})
+  })
+  
+  #Output: UI Plot Differencing (hanya jika d > 0)
+  output$diff_plot_ui <- renderUI({
+    req(dataset_ts())
+  
+    ts_data <- dataset_ts()$price
+    ts_data <- na.omit(as.numeric(ts_data))
+    d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
+  
+    ts_diff <- if (d > 0) diff(ts_data, differences = d) else ts_data
+    adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
+    req(adf_result)
+  
+    if (adf_result$p.value >= 0.05) {
+      return(NULL)  # Tidak stasioner, belum ditindaklanjuti
+    }
+  
+    if (d == 0) {
+      return(card(
+        card_header("Differencing Tidak Diperlukan"),
+        HTML("<p>Data sudah stasioner, sehingga <b>tidak dilakukan differencing</b>.</p>")
+      ))
+    } else {
+      return(card(
+        card_header(paste("Plot Setelah Differencing ke-", d)),
+        plotlyOutput("diff_plot") %>% withSpinner()
+      ))
+    }
+  })
 
 #Output: Plot Differencing
 output$diff_plot <- renderPlotly({

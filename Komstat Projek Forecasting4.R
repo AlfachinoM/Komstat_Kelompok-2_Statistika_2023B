@@ -16,12 +16,36 @@ library(urca)
 library(forecast) 
 library(tseries)
 library(lmtest)
+library(shinyjs)
 
 # --- UI (User Interface) ---
 ui <- navbarPage(
-  title = "Aplikasi Forecasting ARIMA",
-  theme = bslib::bs_theme(bootswatch = "cerulean", base_font = font_google("Inter")),
-  
+  title = div(
+    img(src = "logo.png", height = "40px", style = "margin-right:10px;"),
+    span("Aplikasi Forecasting ARIMA", style = "font-weight: 600;")
+  ),
+  id = "main_navbar",
+  theme = bs_theme(
+    version = 5,
+    bootswatch = "flatly",
+    primary = "#87CEEB",
+    base_font = font_google("Inter"),
+    bg = "#f8f9fa",
+    fg = "#212529"  # warna teks gelap agar kontras
+  ),
+  header = tagList(
+    useShinyjs(),
+    tags$head(
+      # Tambahkan file CSS custom (jika ada)
+      tags$link(rel = "stylesheet", type = "text/css", href = "custom.css"),
+      # Tambahkan style background image
+      tags$style(HTML("body {background-image: url('bg-blue.jpg'); background-size: cover; background-attachment: fixed;}")
+      )
+    )
+  ),
+  collapsible = TRUE,
+  inverse = FALSE,
+
   # --- TAB 1: EKSPLORASI DATA (DIUBAH) ---
   tabPanel("Eksplorasi Data",
            # Mengganti layout_sidebar dengan layout_columns untuk full-width

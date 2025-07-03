@@ -104,7 +104,8 @@ ui <- navbarPage(
            card(
              card_header("Uji Stasioneritas (ADF Test)"),
              htmlOutput("stationarity_result"),
-             uiOutput("diff_plot_ui")
+             uiOutput("diff_plot_ui"),
+             plotOutput("diff_acf_pacf_plot")
            )
   ),
   
@@ -112,9 +113,12 @@ ui <- navbarPage(
   tabPanel("Hasil Forecast",
            layout_columns(
              col_widths = c(3, 9),
+             div(), 
+             div(
                card(
                  card_header("Plot Hasil Forecast ARIMA Otomatis"),
                  plotlyOutput("forecastPlotAuto") %>% withSpinner()
+               )
              )
            )
   ),
@@ -343,6 +347,15 @@ server <- function(input, output, session) {
     ts_data <- na.omit(as.numeric(ts_data))
     d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
     
+    # Jika differencing tidak diperlukan
+    if (d == 0) {
+      return(card(
+        card_header("Differencing Tidak Diperlukan"),
+        HTML("<p>Data sudah stasioner, sehingga <b>tidak dilakukan differencing</b>.</p>")
+      ))
+    }
+    
+    #differencing
     ts_diff <- if (d > 0) diff(ts_data, differences = d) else ts_data
     adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
     req(adf_result)
@@ -350,6 +363,18 @@ server <- function(input, output, session) {
     if (adf_result$p.value >= 0.05) {
       return(NULL)  # Tidak stasioner, belum ditindaklanjuti
     }
+    
+    # Jika stasioner setelah differencing, tampilkan dua plot:
+    tagList(
+      card(
+        card_header(paste("Plot Setelah Differencing ke-", d)),
+        plotlyOutput("diff_plot") %>% withSpinner()
+      ),
+      card(
+        card_header(paste("ACF & PACF Setelah Differencing ke-", d)),
+        plotOutput("diff_acf_pacf_plot", height = "600px") %>% withSpinner()
+      )
+    )
     
     if (d == 0) {
       return(card(
@@ -389,6 +414,25 @@ server <- function(input, output, session) {
     
     ggplotly(p)
   })
+  
+  output$diff_acf_pacf_plot <- renderPlot({
+    req(dataset_ts())
+    ts_data <- na.omit(as.numeric(dataset_ts()$price))
+    d <- ndiffs(ts_data, test = "adf")
+    req(d > 0)
+    
+    ts_diff <- diff(ts_data, differences = d)
+    tanggal_diff <- dataset_ts()$observation_date[-(1:d)]
+    
+    tsibble_diff <- tibble(
+      observation_date = tanggal_diff,
+      price = ts_diff
+    ) %>% as_tsibble(index = observation_date)
+    
+    gg_tsdisplay(tsibble_diff, y = price, plot_type = 'partial', lag_max = 36) +
+      labs(title = paste("ACF & PACF Data Setelah Differencing ke-", d))
+  })
+  
   
   #---HASIL FORECASST---
   active_model <- reactiveVal()

@@ -103,7 +103,7 @@ ui <- navbarPage(
            
            card(
              card_header("Uji Stasioneritas (ADF Test)"),
-             htmlOutput("stationarity_result")
+             htmlOutput("stationarity_result"),
              uiOutput("diff_plot_ui")
            )
   ),
@@ -328,14 +328,14 @@ server <- function(input, output, session) {
     p_val <- adf_result$p.value
     status <- if (p_val < 0.05) "<span style='color:green; font-weight:bold;'>STASIONER</span>" else "<span style='color:orange; font-weight:bold;'>TIDAK STASIONER</span>"
     p_val_text <- if(p_val < 0.01) "< 0.01" else round(p_val, 4)
-  
+
     HTML(paste0(
       "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
       "<ul>",
-      "<li><b>Rekomendasi differencing (d):</b> ", d_rekomendasi, "</li>",
+      "<li><b>Rekomendasi differencing (d):</b> ", d_rekomendasi, " → artinya data perlu didifferencing ", if (d_rekomendasi == 0) "tidak perlu" else "sebanyak 1 kali", "</li>",
       "<li><b>Statistik Uji (setelah differencing):</b> ", round(adf_result$statistic, 4), "</li>",
       "<li><b>p-value:</b> ", p_val_text, "</li>",
-      "<li><b>Kesimpulan:</b> Data dianggap ", status, ".</li>",
+      "<li><b>Kesimpulan:</b> Setelah differencing ke-", d_rekomendasi, ", data dianggap ", status, ".</li>",
       "</ul>"
     ))
   })

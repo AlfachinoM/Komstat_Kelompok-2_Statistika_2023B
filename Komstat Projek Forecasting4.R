@@ -287,48 +287,92 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
 
-  #OUTPUT UJI STASIONERITAS
-  output$stationarity_result <- renderUI({
-    req(dataset_ts())
-    
-    ts_data <- dataset_ts()$price
-    ts_data <- na.omit(as.numeric(ts_data))
-    
-    # --- 1. Rekomendasi differencing (d) otomatis ---
-    d_rekomendasi <- ndiffs(ts_data)
-    
-    # --- 2. Differencing 1x jika diperlukan ---
-    ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
-    
-    # --- 3. Uji ADF ---
-    adf_result <- tryCatch({
-      adf.test(ts_diff)
-    }, error = function(e) {
-      return(NULL)
-    })
-    
-    if (is.null(adf_result)) {
-      return(HTML("<p style='color:red;'>Gagal melakukan uji ADF. Periksa apakah jumlah observasi mencukupi.</p>"))
-    }
-    
-    test_stat <- round(adf_result$statistic, 4)
-    p_value <- round(adf_result$p.value, 4)
-    status <- if (p_value < 0.05) {
-      paste0("<span style='color:green;'>STASIONER (p-value = ", p_value, ")</span>")
-    } else {
-      paste0("<span style='color:orange;'>TIDAK STASIONER (p-value = ", p_value, ")</span>")
-    }
-    
-    HTML(paste0(
-      "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
-      "<ul>",
-      "<li><b>Statistik Uji:</b> ", test_stat, "</li>",
-      "<li><b>p-value:</b> ", p_value, "</li>",
-      "<li><b>Rekomendasi differencing:</b> d = ", d_rekomendasi, "</li>",
-      "<li><b>Hasil uji ADF setelah differencing:</b> ", status, "</li>",
-      "</ul>"
+# --- Output: Hasil Uji Stasioneritas ADF ---
+output$stationarity_result <- renderUI({ 
+  req(dataset_ts())
+
+  ts_data <- na.omit(as.numeric(dataset_ts()$price))
+  validate(need(length(ts_data) > 0, "Kolom nilai tidak memiliki data numerik yang valid."))
+
+  #Uji ADF
+  d_rekomendasi <- ndiffs(ts_data, test = "adf")
+  ts_diff <- if (d_rekomendasi > 0) diff(ts_data, differences = d_rekomendasi) else ts_data
+
+  adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
+  if (is.null(adf_result)) {
+    return(HTML("<h4>Uji ADF tidak dapat dilakukan.</h4><p>Kemungkinan data terlalu sedikit setelah differencing.</p>"))
+  }
+
+  p_val <- adf_result$p.value
+  status <- if (p_val < 0.05) "<span style='color:green; font-weight:bold;'>STASIONER</span>" else "<span style='color:orange; font-weight:bold;'>TIDAK STASIONER</span>"
+  p_val_text <- if(p_val < 0.01) "< 0.01" else round(p_val, 4)
+
+  HTML(paste0(
+    "<h4>Hasil Uji Stasioneritas (ADF)</h4>",
+    "<ul>",
+    "<li><b>Rekomendasi differencing (d):</b> ", d_rekomendasi, "</li>",
+    "<li><b>Statistik Uji (setelah differencing):</b> ", round(adf_result$statistic, 4), "</li>",
+    "<li><b>p-value:</b> ", p_val_text, "</li>",
+    "<li><b>Kesimpulan:</b> Data dianggap ", status, ".</li>",
+    "</ul>"
+  ))
+})
+
+#Output: UI Plot Differencing (hanya jika d > 0)
+output$diff_plot_ui <- renderUI({
+  req(dataset_ts())
+
+  ts_data <- dataset_ts()$price
+  ts_data <- na.omit(as.numeric(ts_data))
+  d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
+
+  ts_diff <- if (d > 0) diff(ts_data, differences = d) else ts_data
+  adf_result <- tryCatch(adf.test(ts_diff), error = function(e) NULL)
+  req(adf_result)
+
+  if (adf_result$p.value >= 0.05) {
+    return(NULL)  # Tidak stasioner, belum ditindaklanjuti
+  }
+
+  if (d == 0) {
+    return(card(
+      card_header("Differencing Tidak Diperlukan"),
+      HTML("<p>Data sudah stasioner, sehingga <b>tidak dilakukan differencing</b>.</p>")
     ))
-  })
+  } else {
+    return(card(
+      card_header(paste("Plot Setelah Differencing ke-", d)),
+      plotlyOutput("diff_plot") %>% withSpinner()
+    ))
+  }
+})
+
+#Output: Plot Differencing
+output$diff_plot <- renderPlotly({
+  req(dataset_ts())
+
+  ts_data <- dataset_ts()$price
+  ts_data <- na.omit(as.numeric(ts_data))
+  d <- ndiffs(ts_data, test = "adf")  # konsisten ADF
+  req(d > 0)
+
+  ts_diff <- diff(ts_data, differences = d)
+  tanggal_diff <- dataset_ts()$observation_date[-(1:d)]
+
+  df <- tibble(
+    Tanggal = tanggal_diff,
+    Data_Differenced = ts_diff
+  )
+
+  p <- ggplot(df, aes(x = Tanggal, y = Data_Differenced)) +
+    geom_line(color = "#E69F00") +
+    labs(title = paste("Plot Data Setelah Differencing ke-", d),
+         x = "Tanggal", y = "Nilai") +
+    theme_minimal()
+
+  ggplotly(p)
+})
+
 
   #OUTPUT HASIL FORECASTING
   output$forecastPlot <- renderPlotly({

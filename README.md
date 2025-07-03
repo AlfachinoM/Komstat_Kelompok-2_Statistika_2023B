@@ -8,8 +8,7 @@ Fitur Utama:
 - Eksplorasi Data Awal: Menyediakan ringkasan statistik, plot time series, ACF/PACF, dekomposisi, dan analisis kestasioneran visual.
 - Upload Data Fleksibel: Mengunggah data CSV dan memungkinkan pengguna memilih kolom tanggal dan nilai secara manual.
 - Pemodelan ARIMA Otomatis (Auto_ARIMA) : Membangun model ARIMA secara otomatis dan menampilkan laporan detail modelnya.
-- Pemodelan ARIMA Manual (Manual_ARIMA) : Menginput orde (p,d,q)(P,D,Q) secara manual untuk dibandingkan dengan model ARIMA otomatis (Auto_ARIMA)
-- Visualisasi Interaktif: Menggunakan plotly untuk eksplorasi plot hasil forecast dan dekomposisi data.
+- Visualisasi Interaktif: Menggunakan plotly untuk eksplorasi plot hasil forecast , dekomposisi data plot ACF/PACF , dan sebagainya.
 - Evaluasi Model: Menampilkan performa model dengan metrik akurasi forecast (out-of-sample) dan diagnostik residual.
 
 Anggota Kelompok:

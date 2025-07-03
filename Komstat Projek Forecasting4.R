@@ -112,7 +112,8 @@ ui <- navbarPage(
   tabPanel("Hasil Forecast",
            layout_columns(
              col_widths = c(3, 9),
-             #sidebar input ordo
+             
+             # --- KOLOM 1: Sidebar (25%) ---
              div(
                h4("Pengaturan Ordo ARIMA (Manual)"),
                numericInput("p_order", "Ordo p:", value = 1, min = 0, max = 5),
@@ -124,14 +125,16 @@ ui <- navbarPage(
                actionButton("run_manual_arima", "Gunakan Ordo Manual", icon = icon("cog"), class = "btn-info w-100")
              ),
              
-             #plot arima
-             card(
-               card_header("Plot Hasil Forecast ARIMA Manual"),
-               plotlyOutput("forecastPlotManual") %>% withSpinner()
-             ),
-             card(
-               card_header("Plot Hasil Forecast ARIMA Otomatis"),
-               plotlyOutput("forecastPlotAuto") %>% withSpinner()
+             # --- KOLOM 2: Main panel (75%) ---
+             div(
+               card(
+                 card_header("Plot Hasil Forecast ARIMA Manual"),
+                 plotlyOutput("forecastPlotManual") %>% withSpinner()
+               ),
+               card(
+                 card_header("Plot Hasil Forecast ARIMA Otomatis"),
+                 plotlyOutput("forecastPlotAuto") %>% withSpinner()
+               )
              )
            )
   ),

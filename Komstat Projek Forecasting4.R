@@ -382,7 +382,7 @@ server <- function(input, output, session) {
     ))
   })
   
-  ### --- DIPERBAIKI: Logika UI dinamis yang menampilkan plotly --- ###
+  #plot data yang sudah stasioner
   output$diff_plot_ui <- renderUI({
     req(d_order())
     if (d_order() == 0) return(card(card_header("Differencing Tidak Diperlukan"), HTML("<p>Data sudah stasioner.</p>")))
@@ -399,7 +399,7 @@ server <- function(input, output, session) {
     ggplotly(p)
   })
   
-  ### --- DIPERBAIKI: Menggunakan renderPlotly untuk plot differencing --- ###
+  #plot acf pacf difference
   output$diff_acf_pacf_plot <- renderPlotly({
     req(data_diff())
     p_acf <- data_diff() %>% ACF(y = diff_price, lag_max = 36) %>% autoplot())
